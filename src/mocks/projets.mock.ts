@@ -1,0 +1,68 @@
+import { Projet } from '@/types';
+
+export const mockProjets: Projet[] = [
+  {
+    id: 'proj-01',
+    titre: 'Construction du Grand Sanctuaire',
+    description:
+      'Édification du nouveau sanctuaire principal de 2500 places assises avec centre communautaire et salles pour enfants.',
+    categorie: 'CONSTRUCTION',
+    objectif: 25000000,
+    montantCollecte: 18750000,
+    dateFin: '31 Décembre 2026',
+    statut: 'EN_COURS',
+    imageUrl: 'https://images.unsplash.com/photo-1548625361-1959779df303?auto=format&fit=crop&w=800&q=80',
+    participantsCount: 342,
+    maContribution: 100000,
+    organisateur: 'Comité de Bâtisseurs',
+    lieu: 'Terrain Paroisse Principale',
+  },
+  {
+    id: 'proj-02',
+    titre: 'Sonorisation & Équipement Multimédia',
+    description:
+      'Acquisition de consoles numériques, micros sans-fil haute fidélité, caméras 4K et écrans LED pour la retransmission en direct.',
+    categorie: 'EQUIPEMENT',
+    objectif: 8500000,
+    montantCollecte: 5200000,
+    dateFin: '15 Novembre 2026',
+    statut: 'EN_COURS',
+    imageUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=800&q=80',
+    participantsCount: 156,
+    maContribution: 25000,
+    organisateur: 'Département Médias & Louange',
+    lieu: 'Grand Auditorium',
+  },
+  {
+    id: 'proj-03',
+    titre: 'Mission & Évangélisation Rurale',
+    description:
+      'Implantation de deux nouvelles églises de proximité et distribution de kits scolaires et vivres aux familles vulnérables.',
+    categorie: 'MISSION',
+    objectif: 4000000,
+    montantCollecte: 3600000,
+    dateFin: '30 Octobre 2026',
+    statut: 'EN_COURS',
+    imageUrl: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&w=800&q=80',
+    participantsCount: 98,
+    maContribution: 50000,
+    organisateur: 'Département Mission & Évangélisation',
+    lieu: 'Région Ouest',
+  },
+  {
+    id: 'proj-04',
+    titre: 'Fonds d Entraide & Secours Médical',
+    description:
+      'Soutien financier d urgence pour la prise en charge des frais d hospitalisation des frères et sœurs démunis.',
+    categorie: 'SOCIAL',
+    objectif: 3000000,
+    montantCollecte: 1950000,
+    dateFin: 'Indéterminée (Fonds continu)',
+    statut: 'EN_COURS',
+    imageUrl: 'https://images.unsplash.com/photo-1532938911079-1b06ac7ceec7?auto=format&fit=crop&w=800&q=80',
+    participantsCount: 210,
+    maContribution: 20000,
+    organisateur: 'Commission Sociale & Diaconie',
+    lieu: 'Secrétariat Église',
+  },
+];
