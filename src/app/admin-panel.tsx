@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AppColors, Shadows } from '@/constants/colors';
@@ -19,13 +19,18 @@ import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
+import { KeyboardSpacer } from '@/components/common/KeyboardAwareScreen';
+import { scrollInputIntoView } from '@/utils/scrollInputIntoView';
 import { ProgressBar } from '@/components/common/ProgressBar';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
+import { DISPLAY_PREF_ITEMS, useDisplayPrefsStore } from '@/store/displayPrefsStore';
+import { ASSIGNABLE_ROLES, ROLE_LABELS, canManageCampaigns, canManageMoney, canManagePeople } from '@/constants/roles';
+import { RoleUtilisateur, SourceCaisse } from '@/types';
 
-type AdminTab = 'VALIDATIONS' | 'PROJETS' | 'EVENEMENTS' | 'COTISATIONS' | 'CAISSES' | 'MEMBRES';
+type AdminTab = 'VALIDATIONS' | 'PROJETS' | 'CAISSES' | 'EVENEMENTS' | 'COTISATIONS' | 'MEMBRES';
 
-export default function AdminScreen() {
+export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const insets = useSafeAreaInsets();
   const bottomInset = Platform.OS === 'android'
     ? Math.max(insets.bottom, 48) + 12
@@ -39,6 +44,8 @@ export default function AdminScreen() {
   const projets = useFinanceStore((s) => s.projets);
   const evenements = useFinanceStore((s) => s.evenements);
   const cotisations = useFinanceStore((s) => s.cotisations);
+  const caissesProjet = useFinanceStore((s) => s.caissesProjet);
+  const closeProjectCaisse = useFinanceStore((s) => s.closeProjectCaisse);
 
   const validatePayment = useFinanceStore((s) => s.validatePayment);
   const rejectPayment = useFinanceStore((s) => s.rejectPayment);
@@ -46,14 +53,31 @@ export default function AdminScreen() {
   const addEvent = useFinanceStore((s) => s.addEvent);
   const addCotisation = useFinanceStore((s) => s.addCotisation);
   const recordCashPayment = useFinanceStore((s) => s.recordCashPayment);
+  const recordWithdrawal = useFinanceStore((s) => s.recordWithdrawal);
+  const mouvements = useFinanceStore((s) => s.mouvements);
+  const utilisateurs = useFinanceStore((s) => s.utilisateurs);
+  const addUser = useFinanceStore((s) => s.addUser);
+  const updateUserRole = useFinanceStore((s) => s.updateUserRole);
+  const prefs = useDisplayPrefsStore();
+  const money = canManageMoney(user?.role);
+  const people = canManagePeople(user?.role);
+  const campaigns = canManageCampaigns(user?.role);
 
-  const [activeTab, setActiveTab] = useState<AdminTab>('VALIDATIONS');
+  const [activeTab, setActiveTab] = useState<AdminTab>(money ? 'VALIDATIONS' : 'MEMBRES');
+
+  useEffect(() => {
+    setActiveTab(money ? 'VALIDATIONS' : 'MEMBRES');
+  }, [money, people, user?.role]);
 
   // Modals visibility
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
   const [showCotisationModal, setShowCotisationModal] = useState(false);
   const [showCashModal, setShowCashModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [showPrefsModal, setShowPrefsModal] = useState(false);
+  const [roleUserId, setRoleUserId] = useState<string | null>(null);
 
   // New Project Form State
   const [newProjTitle, setNewProjTitle] = useState('');
@@ -85,6 +109,17 @@ export default function AdminScreen() {
   const [cashAmount, setCashAmount] = useState('');
   const [cashType, setCashType] = useState<'DIME' | 'OFFRANDE' | 'COTISATION' | 'PROJET'>('DIME');
   const [cashTitle, setCashTitle] = useState('Dîme reçue au secrétariat');
+
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawMotif, setWithdrawMotif] = useState('');
+  const [withdrawBeneficiaire, setWithdrawBeneficiaire] = useState('');
+  const [withdrawSource, setWithdrawSource] = useState<SourceCaisse>('CAISSE_PHYSIQUE');
+
+  const [newUserPrenom, setNewUserPrenom] = useState('');
+  const [newUserNom, setNewUserNom] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPhone, setNewUserPhone] = useState('+225 ');
+  const [newUserRole, setNewUserRole] = useState<RoleUtilisateur>('MEMBRE');
 
   const pendingPayments = transactions.filter((t) => t.statut === 'EN_ATTENTE');
 
@@ -232,120 +267,141 @@ export default function AdminScreen() {
     );
   };
 
-  const membersList = [
-    { nom: 'Shahinur Rahman', telephone: '+225 07 48 92 10 33', matricule: 'JCV-MBR-1042', statut: 'À jour', cotis: '25 000 F restant', retard: false },
-    { nom: 'Kouassi Kouamé Éric', telephone: '+225 05 12 34 56 78', matricule: 'JCV-MBR-0891', statut: 'À jour', cotis: '0 F restant', retard: false },
-    { nom: 'Konan Marie-Paule', telephone: '+225 01 23 45 67 89', matricule: 'JCV-MBR-1104', statut: 'En retard', cotis: '50 000 F dû', retard: true },
-    { nom: 'Brou Jean-Marc', telephone: '+225 07 98 76 54 32', matricule: 'JCV-MBR-0752', statut: 'À régulariser', cotis: '10 000 F dû', retard: true },
-    { nom: 'Yao Affoué Chantal', telephone: '+225 05 67 89 01 23', matricule: 'JCV-MBR-1230', statut: 'À jour', cotis: '0 F restant', retard: false },
-  ];
-
-  const handleSendReminder = (nom: string, cotis: string) => {
+  const handleCreateUser = () => {
+    if (!newUserPrenom.trim() || !newUserNom.trim() || !newUserEmail.trim()) {
+      Alert.alert('Champs requis', 'Saisissez le prénom, le nom et l email.');
+      return;
+    }
+    const created = addUser({
+      prenom: newUserPrenom,
+      nom: newUserNom,
+      email: newUserEmail,
+      telephone: newUserPhone.trim() || '+225 07 00 00 00 00',
+      role: newUserRole,
+    });
+    setShowUserModal(false);
+    setNewUserPrenom('');
+    setNewUserNom('');
+    setNewUserEmail('');
+    setNewUserPhone('+225 ');
+    setNewUserRole('MEMBRE');
+    setActiveTab('MEMBRES');
     Alert.alert(
-      'Envoyer un rappel amical',
-      `Envoyer une notification de rappel à ${nom} concernant son engagement (${cotis}) ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Envoyer le rappel',
-          onPress: () => {
-            Alert.alert('Rappel envoyé !', `Un message bienveillant a été envoyé à ${nom}.`);
-          },
-        },
-      ]
+      'Compte créé',
+      `${created.prenom} ${created.nom} peut se connecter avec ${created.email}. Rôle : ${ROLE_LABELS[created.role]}.`
     );
+  };
+
+  const handleChangeRole = (userId: string) => {
+    setRoleUserId(userId);
+  };
+
+  const handleWithdraw = () => {
+    if (!withdrawMotif.trim() || !withdrawAmount.trim()) {
+      Alert.alert('Champs obligatoires', 'Indiquez le montant et le motif du retrait.');
+      return;
+    }
+    const amt = parseInt(withdrawAmount.replace(/\D/g, ''), 10) || 0;
+    if (amt <= 0) {
+      Alert.alert('Montant invalide', 'Saisissez une somme positive.');
+      return;
+    }
+    const result = recordWithdrawal({
+      montant: amt,
+      motif: withdrawMotif.trim(),
+      source: withdrawSource,
+      auteur: user ? `${user.prenom} ${user.nom}`.trim() : 'Trésorier',
+      beneficiaire: withdrawBeneficiaire.trim() || undefined,
+    });
+    if (!result) {
+      Alert.alert('Solde insuffisant', 'Ce montant dépasse le solde de cette caisse.');
+      return;
+    }
+    setShowWithdrawModal(false);
+    setWithdrawAmount('');
+    setWithdrawMotif('');
+    setWithdrawBeneficiaire('');
+    Alert.alert('Sortie enregistrée', `${amt.toLocaleString('fr-FR')} FCFA ont été retirés de la caisse.`);
   };
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <Header
-        title="Espace Administration"
-        subtitle="Église Jésus Christ Victoire"
-        showBack
+        title={embedded ? (money ? 'Caisse' : 'Gestion') : 'Espace Administration'}
+        subtitle={
+          money && people
+            ? 'Comptes, projets, caisses et argent'
+            : money
+              ? 'Confirmez l argent, ouvrez les caisses et les projets'
+              : 'Créez les comptes, projets, caisses et campagnes'
+        }
+        showBack={!embedded}
         onBack={() => {
           if (router.canGoBack()) router.back();
           else router.replace('/(tabs)');
         }}
         variant="curved"
         rightAction={
-          <TouchableOpacity
-            style={styles.switchRoleHeaderBtn}
-            onPress={() => {
-              switchRole();
-              // Rester sur le tableau de bord — pas de redirection forcée
-            }}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="swap-horizontal" size={18} color={AppColors.white} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {embedded ? (
+              <TouchableOpacity
+                style={styles.switchRoleHeaderBtn}
+                onPress={() => switchRole()}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="swap-horizontal" size={16} color={AppColors.white} />
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity
+              style={styles.switchRoleHeaderBtn}
+              onPress={() => setShowPrefsModal(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="options-outline" size={18} color={AppColors.white} />
+            </TouchableOpacity>
+          </View>
         }
       />
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 + bottomInset }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: (embedded ? 110 : 60) + bottomInset }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Pastoral Admin Identity Card */}
         <View style={styles.topCardContainer}>
           <Card style={styles.adminCard} variant="elevated">
             <View style={styles.adminHeaderRow}>
-              <View style={styles.adminIconCircle}>
-                <Ionicons name="shield-checkmark" size={26} color={AppColors.accent} />
+              <View style={[styles.adminIconCircle, money && styles.tresorIconCircle]}>
+                <Ionicons
+                  name={money ? 'wallet' : 'people'}
+                  size={26}
+                  color={money ? AppColors.accent : AppColors.primary}
+                />
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.adminName}>
-                  {user ? `${user.prenom} ${user.nom}` : 'Trésorier'}
+                  {user ? `${user.prenom} ${user.nom}`.trim() : 'Trésorier'}
                 </Text>
                 <Text style={styles.adminRoleTag}>
-                  Trésorerie & Administration
+                  {user ? ROLE_LABELS[user.role] : 'Administration'}
                 </Text>
               </View>
-              <Badge label="Superviseur" variant="accent" size="sm" />
             </View>
 
-            <View style={styles.adminNavRow}>
-              <TouchableOpacity
-                style={styles.adminNavBtn}
-                onPress={() => router.push('/tresorerie')}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="wallet-outline" size={16} color={AppColors.primary} />
-                <Text style={styles.adminNavBtnText}>Trésorerie</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.adminNavBtn}
-                onPress={() => router.replace('/(tabs)')}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="home-outline" size={16} color={AppColors.primary} />
-                <Text style={styles.adminNavBtnText}>Accueil</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Quick Switch to member view */}
-            <TouchableOpacity
-              style={styles.switchModeBar}
-              onPress={() => {
-                switchRole();
-                router.replace('/(tabs)');
-              }}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="person-outline" size={16} color={AppColors.primary} />
-              <Text style={styles.switchModeText}>
-                Basculer en vue membre
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={AppColors.primary} />
-            </TouchableOpacity>
+            <Text style={styles.adminHowTo}>
+              {money && people
+                ? 'Vous gérez les comptes, les campagnes et l argent : projets, caisses, validations et sorties.'
+                : money
+                  ? 'Le fidèle verse hors de l appli. Vous confirmez ici, ouvrez les caisses et les projets, et notez les sorties.'
+                  : 'Vous créez les comptes, les projets et les caisses. Le trésorier confirme l argent reçu.'}
+            </Text>
           </Card>
         </View>
 
-        {/* Global Treasury Statistics */}
+        {money && prefs.adminSolde ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Trésorerie Globale en Temps Réel</Text>
-          <Text style={styles.sectionSubtitle}>Comptabilité certifiée de l Église</Text>
+          <Text style={styles.sectionTitle}>Argent disponible</Text>
+          <Text style={styles.sectionSubtitle}>Caisse Wave, Orange Money, banque et espèces</Text>
 
           <View style={styles.statsGrid}>
             <Card style={styles.statBoxPrimary}>
@@ -374,75 +430,191 @@ export default function AdminScreen() {
               </Card>
             </View>
           </View>
-        </View>
 
-        {/* 4 PRIMARY MANAGEMENT ACTION BUTTONS */}
-        <View style={styles.quickActionsContainer}>
-          <Text style={styles.sectionTitle}>Actions de Gestion Pastorale</Text>
-          <Text style={styles.sectionSubtitle}>Créer, planifier et encaisser en 1 clic</Text>
-
-          <View style={styles.actionButtonsGrid}>
+          <Card style={styles.caisseCard}>
+            {[
+              { label: 'Wave', value: tresorerie.soldeWave },
+              { label: 'Orange Money', value: tresorerie.soldeOrangeMoney },
+              { label: 'Banque', value: tresorerie.soldeBancaire },
+              { label: 'Espèces', value: tresorerie.soldeCaissePhysique },
+            ].map((line) => (
+              <View key={line.label} style={styles.caisseRow}>
+                <Text style={styles.caisseLabel}>{line.label}</Text>
+                <Text style={styles.caisseValue}>{line.value.toLocaleString('fr-FR')} F</Text>
+              </View>
+            ))}
             <TouchableOpacity
-              style={styles.actionGridBtn}
-              onPress={() => setShowProjectModal(true)}
+              style={styles.withdrawLink}
+              onPress={() => setShowWithdrawModal(true)}
               activeOpacity={0.85}
             >
-              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#E0F2FE' }]}>
-                <Ionicons name="business-outline" size={22} color="#0284C7" />
-              </View>
-              <Text style={styles.actionBtnTitle}>+ Nouveau Projet</Text>
-              <Text style={styles.actionBtnDesc}>Temple, sonorisation, terrain</Text>
+              <Ionicons name="arrow-down-circle-outline" size={18} color="#EF4444" />
+              <Text style={styles.withdrawLinkText}>Noter une sortie de caisse</Text>
             </TouchableOpacity>
+            {mouvements.slice(0, 3).map((mv) => (
+              <Text key={mv.id} style={styles.mouvementLine}>
+                {mv.type === 'SORTIE' ? '−' : '+'}
+                {mv.montant.toLocaleString('fr-FR')} F · {mv.motif}
+              </Text>
+            ))}
+          </Card>
+        </View>
+        ) : null}
 
+        {!money && people ? (
+          <View style={styles.section}>
+            <Card style={styles.pendingHintCard}>
+              <Ionicons name="time-outline" size={20} color={AppColors.accent} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.pendingHintTitle}>
+                  {pendingPayments.length === 0
+                    ? 'Aucun versement en attente'
+                    : `${pendingPayments.length} versement${pendingPayments.length > 1 ? 's' : ''} chez le trésorier`}
+                </Text>
+                <Text style={styles.pendingHintSub}>
+                  Seul le trésorier confirme l argent et tient la caisse.
+                </Text>
+              </View>
+            </Card>
+          </View>
+        ) : null}
+
+        {prefs.adminQuickActions && (people || money) ? (
+        <View style={styles.quickActionsContainer}>
+          <Text style={styles.sectionTitle}>Actions</Text>
+          <Text style={styles.sectionSubtitle}>
+            Créer un projet, une caisse, un compte, ou ouvrir la trésorerie.
+          </Text>
+
+          <View style={styles.actionButtonsGrid}>
+            {campaigns ? (
             <TouchableOpacity
               style={styles.actionGridBtn}
-              onPress={() => setShowEventModal(true)}
+              onPress={() => router.push('/projet/nouveau')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.actionBtnIconCircle, { backgroundColor: AppColors.primaryMuted }]}>
+                <Ionicons name="add-circle-outline" size={22} color={AppColors.primary} />
+              </View>
+              <Text style={styles.actionBtnTitle}>Nouveau projet</Text>
+              <Text style={styles.actionBtnDesc}>Publier une collecte</Text>
+            </TouchableOpacity>
+            ) : null}
+
+            {campaigns ? (
+            <TouchableOpacity
+              style={styles.actionGridBtn}
+              onPress={() => router.push('/caisse/nouvelle')}
               activeOpacity={0.85}
             >
               <View style={[styles.actionBtnIconCircle, { backgroundColor: '#FEF3C7' }]}>
-                <Ionicons name="calendar-outline" size={22} color="#D97706" />
+                <Ionicons name="wallet-outline" size={22} color="#D97706" />
               </View>
-              <Text style={styles.actionBtnTitle}>+ Nouvel Événement</Text>
-              <Text style={styles.actionBtnDesc}>Séminaire, retraite, conférence</Text>
+              <Text style={styles.actionBtnTitle}>Nouvelle caisse</Text>
+              <Text style={styles.actionBtnDesc}>Ouvrir une collecte</Text>
             </TouchableOpacity>
+            ) : null}
+
+            {campaigns ? (
+            <TouchableOpacity
+              style={styles.actionGridBtn}
+              onPress={() => router.push('/evenement/nouveau')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#EDE9FE' }]}>
+                <Ionicons name="calendar-outline" size={22} color="#7C3AED" />
+              </View>
+              <Text style={styles.actionBtnTitle}>Nouvel événement</Text>
+              <Text style={styles.actionBtnDesc}>Séminaire ou conférence</Text>
+            </TouchableOpacity>
+            ) : null}
+
+            {people ? (
+            <TouchableOpacity
+              style={styles.actionGridBtn}
+              onPress={() => setShowUserModal(true)}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#E0F2FE' }]}>
+                <Ionicons name="person-add-outline" size={22} color="#0284C7" />
+              </View>
+              <Text style={styles.actionBtnTitle}>Nouveau compte</Text>
+              <Text style={styles.actionBtnDesc}>Fidèle, trésorier ou admin</Text>
+            </TouchableOpacity>
+            ) : null}
 
             <TouchableOpacity
               style={styles.actionGridBtn}
-              onPress={() => setShowCotisationModal(true)}
+              onPress={() => router.push('/(tabs)/payeurs')}
               activeOpacity={0.85}
             >
-              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#DCFCE7' }]}>
-                <Ionicons name="receipt-outline" size={22} color="#16A34A" />
+              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#E0F2FE' }]}>
+                <Ionicons name="people-outline" size={22} color="#0284C7" />
               </View>
-              <Text style={styles.actionBtnTitle}>+ Nouvelle Cotisation</Text>
-              <Text style={styles.actionBtnDesc}>Campagne, fête de moisson</Text>
+              <Text style={styles.actionBtnTitle}>Tous les payeurs</Text>
+              <Text style={styles.actionBtnDesc}>Qui a payé, sans exception</Text>
             </TouchableOpacity>
 
+            {money ? (
             <TouchableOpacity
               style={styles.actionGridBtn}
               onPress={() => setShowCashModal(true)}
               activeOpacity={0.85}
             >
-              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#F3E8FF' }]}>
-                <Ionicons name="cash-outline" size={22} color="#9333EA" />
+              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#DCFCE7' }]}>
+                <Ionicons name="cash-outline" size={22} color="#16A34A" />
               </View>
-              <Text style={styles.actionBtnTitle}>+ Encaisser Espèces</Text>
-              <Text style={styles.actionBtnDesc}>Versement guichet secrétariat</Text>
+              <Text style={styles.actionBtnTitle}>Versement espèces</Text>
+              <Text style={styles.actionBtnDesc}>Déjà reçu au secrétariat</Text>
             </TouchableOpacity>
+            ) : null}
+
+            {money ? (
+            <TouchableOpacity
+              style={styles.actionGridBtn}
+              onPress={() => router.push('/tresorerie')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#FFF7ED' }]}>
+                <Ionicons name="stats-chart-outline" size={22} color={AppColors.accent} />
+              </View>
+              <Text style={styles.actionBtnTitle}>Trésorerie complète</Text>
+              <Text style={styles.actionBtnDesc}>Caisses, journal, payeurs</Text>
+            </TouchableOpacity>
+            ) : people ? (
+            <TouchableOpacity
+              style={styles.actionGridBtn}
+              onPress={() => router.push('/tresorerie')}
+              activeOpacity={0.85}
+            >
+              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#FFF7ED' }]}>
+                <Ionicons name="stats-chart-outline" size={22} color={AppColors.accent} />
+              </View>
+              <Text style={styles.actionBtnTitle}>Voir la trésorerie</Text>
+              <Text style={styles.actionBtnDesc}>Caisses et soldes de l Église</Text>
+            </TouchableOpacity>
+            ) : null}
           </View>
         </View>
+        ) : null}
 
-        {/* Horizontal Navigation Tabs for Admin */}
+        {(() => {
+          const tabs = ([
+              money && prefs.adminValidations
+                ? { id: 'VALIDATIONS' as const, label: 'À confirmer', count: pendingPayments.length }
+                : null,
+              campaigns && prefs.adminCampagnes ? { id: 'PROJETS' as const, label: `Projets (${projets.length})` } : null,
+              campaigns && prefs.adminCampagnes ? { id: 'CAISSES' as const, label: `Caisses (${caissesProjet.length})` } : null,
+              campaigns && prefs.adminCampagnes ? { id: 'EVENEMENTS' as const, label: `Événements (${evenements.length})` } : null,
+              campaigns && prefs.adminCampagnes ? { id: 'COTISATIONS' as const, label: `Cotisations (${cotisations.length})` } : null,
+              people && prefs.adminMembres ? { id: 'MEMBRES' as const, label: `Comptes (${utilisateurs.length})` } : null,
+            ].filter(Boolean) as { id: AdminTab; label: string; count?: number }[]);
+          if (tabs.length === 0) return null;
+          if (tabs.length === 1) return null;
+          return (
         <View style={styles.tabsStrip}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsStripContent}>
-            {[
-              { id: 'VALIDATIONS', label: 'Validations', count: pendingPayments.length },
-              { id: 'PROJETS', label: `Projets (${projets.length})` },
-              { id: 'EVENEMENTS', label: `Événements (${evenements.length})` },
-              { id: 'COTISATIONS', label: `Cotisations (${cotisations.length})` },
-              { id: 'CAISSES', label: 'Caisses' },
-              { id: 'MEMBRES', label: `Membres (${membersList.length})` },
-            ].map((tab) => {
+            {tabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <TouchableOpacity
@@ -464,23 +636,24 @@ export default function AdminScreen() {
             })}
           </ScrollView>
         </View>
+          );
+        })()}
 
-        {/* TAB 1: VALIDATIONS EN ATTENTE */}
-        {activeTab === 'VALIDATIONS' && (
+        {money && activeTab === 'VALIDATIONS' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
-                Paiements à Valider ({pendingPayments.length})
+                Versements à confirmer ({pendingPayments.length})
               </Text>
-              <Text style={styles.sectionSub}>Approbation pastorale</Text>
+              <Text style={styles.sectionSub}>Cochez seulement si l argent est bien arrivé</Text>
             </View>
 
             {pendingPayments.length === 0 ? (
               <Card style={styles.emptyCard}>
                 <Ionicons name="checkmark-done-circle-outline" size={48} color={AppColors.success} />
-                <Text style={styles.emptyTitle}>Tous les paiements sont validés !</Text>
+                <Text style={styles.emptyTitle}>Rien à confirmer</Text>
                 <Text style={styles.emptySub}>
-                  Aucun versement n est en attente d encaissement pour le moment.
+                  Quand un fidèle déclare un versement Wave, Orange Money, virement ou espèces, il apparaît ici.
                 </Text>
               </Card>
             ) : (
@@ -542,16 +715,26 @@ export default function AdminScreen() {
         )}
 
         {/* TAB 2: GESTION DES PROJETS */}
-        {activeTab === 'PROJETS' && (
+        {campaigns && activeTab === 'PROJETS' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Projets & Travaux du Temple</Text>
-              <TouchableOpacity onPress={() => setShowProjectModal(true)}>
+              <TouchableOpacity onPress={() => router.push('/projet/nouveau')}>
                 <Text style={styles.linkText}>+ Nouveau projet</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.cardsList}>
+              {projets.length === 0 ? (
+                <Card style={styles.emptyCard}>
+                  <Ionicons name="folder-open-outline" size={42} color={AppColors.textMuted} />
+                  <Text style={styles.emptyTitle}>Aucun projet</Text>
+                  <Text style={styles.emptySub}>Créez le premier projet : une caisse de collecte sera ouverte en même temps.</Text>
+                  <TouchableOpacity onPress={() => router.push('/projet/nouveau')} style={{ marginTop: 12 }}>
+                    <Text style={styles.linkText}>Créer un projet</Text>
+                  </TouchableOpacity>
+                </Card>
+              ) : null}
               {projets.map((p) => {
                 const percent = Math.min(Math.round((p.montantCollecte / p.objectif) * 100), 100);
                 return (
@@ -596,12 +779,90 @@ export default function AdminScreen() {
           </View>
         )}
 
+        {campaigns && activeTab === 'CAISSES' && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Caisses de collecte</Text>
+              <TouchableOpacity onPress={() => router.push('/caisse/nouvelle')}>
+                <Text style={styles.linkText}>+ Nouvelle caisse</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.cardsList}>
+              {caissesProjet.length === 0 ? (
+                <Card style={styles.emptyCard}>
+                  <Ionicons name="wallet-outline" size={42} color={AppColors.textMuted} />
+                  <Text style={styles.emptyTitle}>Aucune caisse</Text>
+                  <Text style={styles.emptySub}>
+                    Ouvrez une caisse autonome, ou créez un projet : une caisse liée est ouverte automatiquement.
+                  </Text>
+                  <TouchableOpacity onPress={() => router.push('/caisse/nouvelle')} style={{ marginTop: 12 }}>
+                    <Text style={styles.linkText}>Ouvrir une caisse</Text>
+                  </TouchableOpacity>
+                </Card>
+              ) : (
+                caissesProjet.map((c) => {
+                  const percent = c.objectif
+                    ? Math.min(Math.round((c.montantCollecte / c.objectif) * 100), 100)
+                    : 0;
+                  return (
+                    <Card key={c.id} style={styles.projectManageCard} variant="elevated">
+                      <View style={styles.projectManageHeader}>
+                        <View style={styles.catBadge}>
+                          <Text style={styles.catBadgeText}>Caisse</Text>
+                        </View>
+                        <Badge
+                          label={c.statut === 'OUVERTE' ? 'Ouverte' : 'Terminée'}
+                          variant={c.statut === 'OUVERTE' ? 'success' : 'neutral'}
+                          size="sm"
+                        />
+                      </View>
+                      <Text style={styles.itemTitle}>{c.nom}</Text>
+                      <Text style={styles.itemSub}>{c.description}</Text>
+                      <View style={styles.progressBox}>
+                        <ProgressBar progress={percent / 100} height={7} />
+                        <View style={styles.progressLabels}>
+                          <Text style={styles.progressCollected}>
+                            {c.montantCollecte.toLocaleString('fr-FR')} FCFA
+                          </Text>
+                          <Text style={styles.progressGoal}>
+                            Cible : {c.objectif.toLocaleString('fr-FR')} FCFA
+                          </Text>
+                        </View>
+                      </View>
+                      {c.statut === 'OUVERTE' ? (
+                        <TouchableOpacity
+                          style={styles.btnSmall}
+                          onPress={() => {
+                            Alert.alert(
+                              'Clôturer cette caisse ?',
+                              `Marquer « ${c.nom} » comme terminée ? Le projet lié sera aussi clôturé.`,
+                              [
+                                { text: 'Annuler', style: 'cancel' },
+                                {
+                                  text: 'Oui, c est terminé',
+                                  onPress: () => closeProjectCaisse(c.id),
+                                },
+                              ]
+                            );
+                          }}
+                        >
+                          <Text style={styles.btnSmallText}>Marquer terminée</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </Card>
+                  );
+                })
+              )}
+            </View>
+          </View>
+        )}
+
         {/* TAB 3: GESTION DES ÉVÉNEMENTS */}
-        {activeTab === 'EVENEMENTS' && (
+        {campaigns && activeTab === 'EVENEMENTS' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Séminaires, Retraites & Conférences</Text>
-              <TouchableOpacity onPress={() => setShowEventModal(true)}>
+              <TouchableOpacity onPress={() => router.push('/evenement/nouveau')}>
                 <Text style={styles.linkText}>+ Nouvel événement</Text>
               </TouchableOpacity>
             </View>
@@ -652,7 +913,7 @@ export default function AdminScreen() {
         )}
 
         {/* TAB 4: GESTION DES COTISATIONS */}
-        {activeTab === 'COTISATIONS' && (
+        {campaigns && activeTab === 'COTISATIONS' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Campagnes de Cotisations</Text>
@@ -679,88 +940,34 @@ export default function AdminScreen() {
           </View>
         )}
 
-        {/* TAB 5: COMPTES ET CAISSES */}
-        {activeTab === 'CAISSES' && (
+        {people && activeTab === 'MEMBRES' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Ventilation des Comptes & Caisses</Text>
-              <TouchableOpacity onPress={() => setShowCashModal(true)}>
-                <Text style={styles.linkText}>+ Encaisser Espèces</Text>
+              <Text style={styles.sectionTitle}>Comptes et rôles</Text>
+              <TouchableOpacity onPress={() => setShowUserModal(true)}>
+                <Text style={styles.linkText}>+ Nouveau compte</Text>
               </TouchableOpacity>
             </View>
+            <Text style={styles.sectionSubtitle}>
+              Touchez un rôle pour le changer. Un fidèle déclare. Un trésorier confirme. Un admin crée les comptes.
+            </Text>
 
             <View style={styles.caissesList}>
-              {[
-                { name: 'Compte Bancaire Église', amount: tresorerie.soldeBancaire, icon: 'business-outline', color: '#0C4A48' },
-                { name: 'Compte Wave Marchand', amount: tresorerie.soldeWave, icon: 'water-outline', color: '#1DA1F2' },
-                { name: 'Compte Orange Money Pro', amount: tresorerie.soldeOrangeMoney, icon: 'phone-portrait-outline', color: '#FF7900' },
-                { name: 'Caisse Physique & Quêtes (Secrétariat)', amount: tresorerie.soldeCaissePhysique, icon: 'cash-outline', color: '#10B981' },
-              ].map((caisse, idx) => (
-                <Card key={idx} style={styles.caisseItem} variant="elevated">
-                  <View style={[styles.caisseIconCircle, { backgroundColor: caisse.color + '18' }]}>
-                    <Ionicons name={caisse.icon as any} size={22} color={caisse.color} />
-                  </View>
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={styles.caisseName}>{caisse.name}</Text>
-                    <Text style={styles.caisseSub}>Disponible immédiatement</Text>
-                  </View>
-                  <Text style={styles.caisseAmount}>
-                    {caisse.amount.toLocaleString('fr-FR')} F
-                  </Text>
-                </Card>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* TAB 6: SUIVI DES MEMBRES & RELANCES */}
-        {activeTab === 'MEMBRES' && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Fidèles & Engagements</Text>
-              <Text style={styles.sectionSub}>Suivi paroissial</Text>
-            </View>
-
-            <View style={styles.caissesList}>
-              {membersList.map((m, idx) => (
-                <Card key={idx} style={styles.memberCard} variant="elevated">
+              {utilisateurs.map((m) => (
+                <Card key={m.id} style={styles.memberCard} variant="elevated">
                   <View style={styles.memberTop}>
                     <View style={styles.memberAvatar}>
                       <Ionicons name="person" size={20} color={AppColors.primary} />
                     </View>
                     <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.memberName}>{m.nom}</Text>
-                      <Text style={styles.memberMatricule}>{m.matricule} • {m.telephone}</Text>
+                      <Text style={styles.memberName}>{`${m.prenom} ${m.nom}`.trim()}</Text>
+                      <Text style={styles.memberMatricule}>{m.email} • {m.telephone}</Text>
                     </View>
-                    <Badge label={m.statut} variant={m.retard ? 'danger' : 'success'} size="sm" />
+                    <TouchableOpacity onPress={() => handleChangeRole(m.id)}>
+                      <Badge label={ROLE_LABELS[m.role]} variant={m.role === 'MEMBRE' ? 'neutral' : 'accent'} size="sm" />
+                    </TouchableOpacity>
                   </View>
-
-                  <View style={styles.memberDivider} />
-
-                  <View style={styles.memberBottomRow}>
-                    <View>
-                      <Text style={styles.memberCotisLabel}>Solde cotisation</Text>
-                      <Text style={[styles.memberCotisVal, m.retard && { color: AppColors.danger }]}>
-                        {m.cotis}
-                      </Text>
-                    </View>
-
-                    {m.retard ? (
-                      <TouchableOpacity
-                        style={styles.reminderBtn}
-                        onPress={() => handleSendReminder(m.nom, m.cotis)}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="notifications-outline" size={14} color={AppColors.accentDark} />
-                        <Text style={styles.reminderBtnText}>Envoyer un rappel</Text>
-                      </TouchableOpacity>
-                    ) : (
-                      <View style={styles.upToDateTag}>
-                        <Ionicons name="checkmark-circle" size={16} color={AppColors.success} />
-                        <Text style={styles.upToDateText}>En règle</Text>
-                      </View>
-                    )}
-                  </View>
+                  <Text style={styles.memberHint}>{m.matricule}</Text>
                 </Card>
               ))}
             </View>
@@ -772,7 +979,7 @@ export default function AdminScreen() {
           MODAL 1: CRÉER UN NOUVEAU PROJET
          ======================================================== */}
       <Modal visible={showProjectModal} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <View>
@@ -784,10 +991,16 @@ export default function AdminScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalBody}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               <Text style={styles.inputLabel}>Titre du Projet *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: Extension de la Salle Polyvalente"
                 value={newProjTitle}
                 onChangeText={setNewProjTitle}
@@ -796,6 +1009,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Objectif Financier (FCFA) *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: 10000000"
                 keyboardType="numeric"
                 value={newProjGoal}
@@ -820,6 +1034,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Organisateur / Comité</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="Comité des Bâtisseurs"
                 value={newProjOrganizer}
                 onChangeText={setNewProjOrganizer}
@@ -828,6 +1043,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Date d Échéance</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: 31 Décembre 2026"
                 value={newProjDateFin}
                 onChangeText={setNewProjDateFin}
@@ -836,6 +1052,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Description du Projet</Text>
               <TextInput
                 style={[styles.modalInput, styles.textArea]}
+                onFocus={scrollInputIntoView}
                 placeholder="Expliquez la vision et l impact de ce projet..."
                 multiline
                 numberOfLines={3}
@@ -850,6 +1067,7 @@ export default function AdminScreen() {
                 size="lg"
                 style={{ marginTop: 16, marginBottom: 20 }}
               />
+            <KeyboardSpacer />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -859,7 +1077,7 @@ export default function AdminScreen() {
           MODAL 2: CRÉER UN NOUVEL ÉVÉNEMENT
          ======================================================== */}
       <Modal visible={showEventModal} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <View>
@@ -871,10 +1089,16 @@ export default function AdminScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalBody}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               <Text style={styles.inputLabel}>Titre de l Événement *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: Séminaire des Couples Victorieux"
                 value={newEventTitle}
                 onChangeText={setNewEventTitle}
@@ -883,6 +1107,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Date</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: Samedi 26 Septembre 2026"
                 value={newEventDate}
                 onChangeText={setNewEventDate}
@@ -891,6 +1116,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Horaire</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: 09h00 - 16h30"
                 value={newEventTime}
                 onChangeText={setNewEventTime}
@@ -899,6 +1125,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Lieu</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="Grand Temple de la Victoire"
                 value={newEventPlace}
                 onChangeText={setNewEventPlace}
@@ -907,6 +1134,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Orateur Principal</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="Pasteur Samuel"
                 value={newEventSpeaker}
                 onChangeText={setNewEventSpeaker}
@@ -915,6 +1143,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Tarif (0 si Entrée Libre) (FCFA)</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="0"
                 keyboardType="numeric"
                 value={newEventPrice}
@@ -924,6 +1153,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Nombre de Places Disponibles</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="300"
                 keyboardType="numeric"
                 value={newEventSeats}
@@ -933,6 +1163,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Description & Programme</Text>
               <TextInput
                 style={[styles.modalInput, styles.textArea]}
+                onFocus={scrollInputIntoView}
                 placeholder="Description du thème et objectifs spirituels..."
                 multiline
                 numberOfLines={3}
@@ -947,6 +1178,7 @@ export default function AdminScreen() {
                 size="lg"
                 style={{ marginTop: 16, marginBottom: 20 }}
               />
+            <KeyboardSpacer />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -956,7 +1188,7 @@ export default function AdminScreen() {
           MODAL 3: CRÉER UNE COTISATION
          ======================================================== */}
       <Modal visible={showCotisationModal} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <View>
@@ -968,10 +1200,16 @@ export default function AdminScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalBody}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               <Text style={styles.inputLabel}>Titre de la Cotisation *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: Cotisation Fête des Moissons 2026"
                 value={newCotisTitle}
                 onChangeText={setNewCotisTitle}
@@ -980,6 +1218,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Montant par Fidèle (FCFA) *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="25000"
                 keyboardType="numeric"
                 value={newCotisAmount}
@@ -989,6 +1228,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Date Limite / Échéance</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: 31 Octobre 2026"
                 value={newCotisDeadline}
                 onChangeText={setNewCotisDeadline}
@@ -1001,6 +1241,7 @@ export default function AdminScreen() {
                 size="lg"
                 style={{ marginTop: 16, marginBottom: 20 }}
               />
+            <KeyboardSpacer />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -1010,7 +1251,7 @@ export default function AdminScreen() {
           MODAL 4: ENCAISSER DES ESPÈCES AU GUICHET
          ======================================================== */}
       <Modal visible={showCashModal} animationType="slide" transparent>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <View>
@@ -1022,10 +1263,16 @@ export default function AdminScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalBody}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               <Text style={styles.inputLabel}>Nom & Prénom du Fidèle *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: Yao Kouadio Paul"
                 value={cashDonorName}
                 onChangeText={setCashDonorName}
@@ -1034,6 +1281,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Téléphone du Fidèle</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="+225 07 00 00 00 00"
                 keyboardType="phone-pad"
                 value={cashDonorPhone}
@@ -1043,6 +1291,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Montant Reçu en Liquide (FCFA) *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: 50000"
                 keyboardType="numeric"
                 value={cashAmount}
@@ -1070,6 +1319,7 @@ export default function AdminScreen() {
               <Text style={styles.inputLabel}>Libellé sur la Quittance</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="Dîme du mois au guichet"
                 value={cashTitle}
                 onChangeText={setCashTitle}
@@ -1082,9 +1332,249 @@ export default function AdminScreen() {
                 size="lg"
                 style={{ marginTop: 16, marginBottom: 20 }}
               />
+            <KeyboardSpacer />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={showWithdrawModal} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalHeaderTitle}>Noter une sortie de caisse</Text>
+                <Text style={styles.modalHeaderSub}>Achat, frais, avance — le solde baisse tout de suite</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowWithdrawModal(false)}>
+                <Ionicons name="close-circle" size={26} color={AppColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
+              <Text style={styles.inputLabel}>Source *</Text>
+              <View style={styles.catPickerRow}>
+                {([
+                  { id: 'CAISSE_PHYSIQUE' as const, label: 'Caisse' },
+                  { id: 'WAVE' as const, label: 'Wave' },
+                  { id: 'ORANGE_MONEY' as const, label: 'OM' },
+                  { id: 'BANQUE' as const, label: 'Banque' },
+                ]).map((t) => (
+                  <TouchableOpacity
+                    key={t.id}
+                    style={[styles.catPickBtn, withdrawSource === t.id && styles.catPickBtnActive]}
+                    onPress={() => setWithdrawSource(t.id)}
+                  >
+                    <Text style={[styles.catPickText, withdrawSource === t.id && styles.catPickTextActive]}>
+                      {t.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.inputLabel}>Montant (FCFA) *</Text>
+              <TextInput
+                style={styles.modalInput}
+                onFocus={scrollInputIntoView}
+                placeholder="ex: 100000"
+                keyboardType="numeric"
+                value={withdrawAmount}
+                onChangeText={setWithdrawAmount}
+              />
+              <Text style={styles.inputLabel}>Motif *</Text>
+              <TextInput
+                style={styles.modalInput}
+                onFocus={scrollInputIntoView}
+                placeholder="ex: Achat fournitures"
+                value={withdrawMotif}
+                onChangeText={setWithdrawMotif}
+              />
+              <Text style={styles.inputLabel}>Bénéficiaire (optionnel)</Text>
+              <TextInput
+                style={styles.modalInput}
+                onFocus={scrollInputIntoView}
+                placeholder="ex: Fournisseur"
+                value={withdrawBeneficiaire}
+                onChangeText={setWithdrawBeneficiaire}
+              />
+              <Button
+                title="Enregistrer la sortie"
+                onPress={handleWithdraw}
+                variant="primary"
+                size="lg"
+                style={{ marginTop: 16, marginBottom: 20 }}
+              />
+              <KeyboardSpacer />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={showUserModal} animationType="slide" transparent>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalHeaderTitle}>Nouveau compte</Text>
+                <Text style={styles.modalHeaderSub}>La personne se connecte avec son email</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowUserModal(false)}>
+                <Ionicons name="close-circle" size={26} color={AppColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Text style={styles.inputLabel}>Prénom *</Text>
+              <TextInput
+                style={styles.modalInput}
+                onFocus={scrollInputIntoView}
+                placeholder="Amina"
+                value={newUserPrenom}
+                onChangeText={setNewUserPrenom}
+              />
+              <Text style={styles.inputLabel}>Nom *</Text>
+              <TextInput
+                style={styles.modalInput}
+                onFocus={scrollInputIntoView}
+                placeholder="Yao"
+                value={newUserNom}
+                onChangeText={setNewUserNom}
+              />
+              <Text style={styles.inputLabel}>Email *</Text>
+              <TextInput
+                style={styles.modalInput}
+                onFocus={scrollInputIntoView}
+                placeholder="amina@jcvictoire.org"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={newUserEmail}
+                onChangeText={setNewUserEmail}
+              />
+              <Text style={styles.inputLabel}>Téléphone</Text>
+              <TextInput
+                style={styles.modalInput}
+                onFocus={scrollInputIntoView}
+                placeholder="+225 07 00 00 00 00"
+                keyboardType="phone-pad"
+                value={newUserPhone}
+                onChangeText={setNewUserPhone}
+              />
+              <Text style={styles.inputLabel}>Rôle</Text>
+              {ASSIGNABLE_ROLES.map((r) => {
+                const selected = newUserRole === r.id;
+                return (
+                  <TouchableOpacity
+                    key={r.id}
+                    style={[styles.rolePick, selected && styles.rolePickActive]}
+                    onPress={() => setNewUserRole(r.id)}
+                  >
+                    <Text style={[styles.rolePickTitle, selected && styles.rolePickTitleActive]}>{r.label}</Text>
+                    <Text style={styles.rolePickHint}>{r.hint}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <Button
+                title="Créer le compte"
+                onPress={handleCreateUser}
+                variant="primary"
+                size="lg"
+                style={{ marginTop: 16, marginBottom: 20 }}
+              />
+              <KeyboardSpacer />
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={showPrefsModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalHeaderTitle}>Éléments affichés</Text>
+                <Text style={styles.modalHeaderSub}>Masquez ce qui ne sert pas au quotidien</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowPrefsModal(false)}>
+                <Ionicons name="close-circle" size={26} color={AppColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              {DISPLAY_PREF_ITEMS.filter((item) => {
+                if (item.key === 'adminSolde' || item.key === 'adminValidations') return money;
+                if (item.key === 'adminMembres' || item.key === 'adminCampagnes') return people;
+                return money || people;
+              }).map((item) => {
+                const on = prefs[item.key];
+                return (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={styles.prefRow}
+                    onPress={() => prefs.toggle(item.key)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.prefArea}>{item.area}</Text>
+                      <Text style={styles.prefTitle}>{item.title}</Text>
+                      <Text style={styles.prefHint}>{item.hint}</Text>
+                    </View>
+                    <View style={[styles.prefSwitch, on && styles.prefSwitchOn]}>
+                      <Text style={styles.prefSwitchText}>{on ? 'ON' : 'OFF'}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+              <Button
+                title="Fermer"
+                onPress={() => setShowPrefsModal(false)}
+                variant="outline"
+                size="lg"
+                style={{ marginTop: 8, marginBottom: 20 }}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!roleUserId} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContainer, { maxHeight: '70%' }]}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalHeaderTitle}>Changer le rôle</Text>
+                <Text style={styles.modalHeaderSub}>
+                  {(() => {
+                    const u = utilisateurs.find((x) => x.id === roleUserId);
+                    return u ? `${u.prenom} ${u.nom}`.trim() : '';
+                  })()}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setRoleUserId(null)}>
+                <Ionicons name="close-circle" size={26} color={AppColors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody}>
+              {ASSIGNABLE_ROLES.map((r) => (
+                <TouchableOpacity
+                  key={r.id}
+                  style={styles.rolePick}
+                  onPress={() => {
+                    if (roleUserId) updateUserRole(roleUserId, r.id);
+                    setRoleUserId(null);
+                  }}
+                >
+                  <Text style={styles.rolePickTitle}>{r.label}</Text>
+                  <Text style={styles.rolePickHint}>{r.hint}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1126,9 +1616,29 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 18,
-    backgroundColor: AppColors.accentLight,
+    backgroundColor: AppColors.primaryMuted,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tresorIconCircle: {
+    backgroundColor: AppColors.accentLight,
+  },
+  pendingHintCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 16,
+  },
+  pendingHintTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: AppColors.textPrimary,
+  },
+  pendingHintSub: {
+    fontSize: 12,
+    color: AppColors.textSecondary,
+    marginTop: 2,
   },
   adminName: {
     fontSize: 17,
@@ -1139,6 +1649,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: AppColors.textSecondary,
     marginTop: 2,
+  },
+  adminHowTo: {
+    fontSize: 13,
+    color: AppColors.textSecondary,
+    lineHeight: 18,
+    marginBottom: 14,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 12,
   },
   switchModeBar: {
     flexDirection: 'row',
@@ -1271,7 +1790,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   actionGridBtn: {
-    width: '48%',
+    flexGrow: 1,
+    flexBasis: '46%',
     backgroundColor: AppColors.white,
     borderRadius: 18,
     padding: 14,
@@ -1740,4 +2260,122 @@ const styles = StyleSheet.create({
   catPickTextActive: {
     color: AppColors.white,
   },
+  memberHint: {
+    fontSize: 11,
+    color: AppColors.textMuted,
+    marginTop: 8,
+  },
+  rolePick: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1.5,
+    borderColor: AppColors.borderLight,
+  },
+  rolePickActive: {
+    borderColor: AppColors.primary,
+    backgroundColor: AppColors.primaryMuted,
+  },
+  rolePickTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: AppColors.textPrimary,
+  },
+  rolePickTitleActive: {
+    color: AppColors.primary,
+  },
+  rolePickHint: {
+    fontSize: 11,
+    color: AppColors.textSecondary,
+    marginTop: 3,
+    lineHeight: 15,
+  },
+  prefRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.borderLight,
+  },
+  prefArea: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: AppColors.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  prefTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: AppColors.textPrimary,
+    marginTop: 2,
+  },
+  prefHint: {
+    fontSize: 12,
+    color: AppColors.textSecondary,
+    marginTop: 2,
+  },
+  prefSwitch: {
+    backgroundColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  prefSwitchOn: {
+    backgroundColor: AppColors.primary,
+  },
+  prefSwitchText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: AppColors.white,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  caisseCard: {
+    marginTop: 10,
+    padding: 14,
+    borderRadius: 16,
+  },
+  caisseRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+  },
+  caisseLabel: {
+    fontSize: 13,
+    color: AppColors.textSecondary,
+  },
+  caisseValue: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppColors.textPrimary,
+  },
+  withdrawLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: AppColors.borderLight,
+  },
+  withdrawLinkText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#EF4444',
+  },
+  mouvementLine: {
+    fontSize: 11,
+    color: AppColors.textMuted,
+    marginTop: 6,
+  },
 });
+
+export default function AdminPanelRoute() {
+  return <Redirect href="/(tabs)" />;
+}

@@ -5,7 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
+  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,70 +15,113 @@ import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { ProgressBar } from '@/components/common/ProgressBar';
 import { TabsSelector } from '@/components/common/TabsSelector';
+import { SearchBar } from '@/components/common/SearchBar';
+import { FilterChips } from '@/components/common/FilterChips';
+import { PaginationBar } from '@/components/common/PaginationBar';
+import { usePagedList } from '@/hooks/usePagedList';
+import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
+import { canManageCampaigns } from '@/constants/roles';
+import { ListSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 export default function ProjetsScreen() {
   const projets = useFinanceStore((s) => s.projets);
   const evenements = useFinanceStore((s) => s.evenements);
   const caissesProjet = useFinanceStore((s) => s.caissesProjet);
+  const closeProjectCaisse = useFinanceStore((s) => s.closeProjectCaisse);
+  const user = useAuthStore((s) => s.user);
+  const staff = canManageCampaigns(user?.role);
 
   const [activeTab, setActiveTab] = useState<'PROJETS' | 'EVENEMENTS' | 'CAISSES'>('PROJETS');
   const [searchQuery, setSearchQuery] = useState('');
+  const [projetStatut, setProjetStatut] = useState<'TOUS' | 'EN_COURS' | 'CLOTURE'>('TOUS');
+  const [caisseStatut, setCaisseStatut] = useState<'TOUS' | 'OUVERTE' | 'TERMINEE'>('TOUS');
+  const ready = useScreenReady(580);
 
   const filteredProjets = useMemo(() => {
-    return projets.filter(
-      (p) =>
-        p.titre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.categorie.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [projets, searchQuery]);
+    const q = searchQuery.toLowerCase();
+    return projets.filter((p) => {
+      const searchOk =
+        p.titre.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q) ||
+        p.categorie.toLowerCase().includes(q);
+      const statusOk = projetStatut === 'TOUS' || p.statut === projetStatut;
+      return searchOk && statusOk;
+    });
+  }, [projets, searchQuery, projetStatut]);
 
   const filteredEvenements = useMemo(() => {
+    const q = searchQuery.toLowerCase();
     return evenements.filter(
       (e) =>
-        e.titre.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.lieu.toLowerCase().includes(searchQuery.toLowerCase())
+        e.titre.toLowerCase().includes(q) ||
+        e.lieu.toLowerCase().includes(q) ||
+        e.description.toLowerCase().includes(q)
     );
   }, [evenements, searchQuery]);
 
   const visibleCaisses = useMemo(() => {
-    return caissesProjet.filter((c) => c.visibleAuxMembres);
-  }, [caissesProjet]);
+    const q = searchQuery.toLowerCase();
+    return caissesProjet.filter((c) => {
+      if (!staff && !c.visibleAuxMembres) return false;
+      const searchOk =
+        !q ||
+        c.nom.toLowerCase().includes(q) ||
+        c.description.toLowerCase().includes(q);
+      const statusOk = caisseStatut === 'TOUS' || c.statut === caisseStatut;
+      return searchOk && statusOk;
+    });
+  }, [caissesProjet, staff, searchQuery, caisseStatut]);
+
+  const projetsPage = usePagedList(filteredProjets, 6, `${searchQuery}|${projetStatut}`);
+  const caissesPage = usePagedList(visibleCaisses, 6, `${searchQuery}|${caisseStatut}`);
+  const eventsPage = usePagedList(filteredEvenements, 6, searchQuery);
+
+  const goCreate = () => {
+    if (activeTab === 'CAISSES') router.push('/caisse/nouvelle');
+    else if (activeTab === 'EVENEMENTS') router.push('/evenement/nouveau');
+    else router.push('/projet/nouveau');
+  };
 
   return (
     <View style={styles.container}>
       {/* Header (Screen 14 style) */}
       <Header
-        title="Projets & Événements"
-        subtitle="Missions & Activités communautaires"
+        title="Projets"
         showBack
         onBack={() => router.replace('/(tabs)')}
         variant="curved"
+        rightAction={
+          staff ? (
+            <TouchableOpacity
+              style={styles.headerCreateBtn}
+              onPress={goCreate}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="add" size={22} color={AppColors.white} />
+            </TouchableOpacity>
+          ) : undefined
+        }
       />
 
+      {!ready ? (
+        <ListSkeleton count={4} />
+      ) : (
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Ionicons name="search-outline" size={20} color={AppColors.textSecondary} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Rechercher un projet, une conférence..."
-              placeholderTextColor={AppColors.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery ? (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={18} color={AppColors.textMuted} />
-              </TouchableOpacity>
-            ) : null}
-          </View>
+          <SearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Rechercher un projet, une caisse, un événement…"
+          />
         </View>
 
         {/* Tab Selector (Segmented control) */}
@@ -95,14 +138,74 @@ export default function ProjetsScreen() {
           />
         </View>
 
+        {activeTab === 'PROJETS' ? (
+          <View style={styles.filterRow}>
+            <FilterChips
+              value={projetStatut}
+              onChange={setProjetStatut}
+              options={[
+                { id: 'TOUS', label: 'Tous', count: projets.length },
+                { id: 'EN_COURS', label: 'En cours' },
+                { id: 'CLOTURE', label: 'Terminés' },
+              ]}
+            />
+          </View>
+        ) : null}
+
+        {activeTab === 'CAISSES' ? (
+          <View style={styles.filterRow}>
+            <FilterChips
+              value={caisseStatut}
+              onChange={setCaisseStatut}
+              options={[
+                { id: 'TOUS', label: 'Toutes' },
+                { id: 'OUVERTE', label: 'Ouvertes' },
+                { id: 'TERMINEE', label: 'Terminées' },
+              ]}
+            />
+          </View>
+        ) : null}
+
+        {staff ? (
+          <View style={styles.staffBanner}>
+            <Text style={styles.staffBannerText}>
+              {activeTab === 'CAISSES'
+                ? 'Ouvrez une caisse ou clôturez une collecte terminée.'
+                : activeTab === 'EVENEMENTS'
+                  ? 'Publiez un séminaire, une retraite ou une conférence.'
+                  : 'Créez un projet : une caisse de collecte est ouverte automatiquement.'}
+            </Text>
+            <TouchableOpacity style={styles.staffBannerBtn} onPress={goCreate} activeOpacity={0.85}>
+              <Ionicons name="add-circle" size={18} color={AppColors.white} />
+              <Text style={styles.staffBannerBtnText}>
+                {activeTab === 'CAISSES'
+                  ? 'Nouvelle caisse'
+                  : activeTab === 'EVENEMENTS'
+                    ? 'Nouvel événement'
+                    : 'Nouveau projet'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         {activeTab === 'CAISSES' && (
           <View style={styles.listContainer}>
-            {visibleCaisses.map((caisse) => {
+            {visibleCaisses.length === 0 ? (
+              <View style={styles.emptyBlock}>
+                <Text style={styles.emptyHint}>Aucune caisse.</Text>
+                {staff ? (
+                  <TouchableOpacity onPress={() => router.push('/caisse/nouvelle')}>
+                    <Text style={styles.emptyLink}>Ouvrir une caisse</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : (
+            caissesPage.pageItems.map((caisse, i) => {
               const percent = caisse.objectif
                 ? Math.min(Math.round((caisse.montantCollecte / caisse.objectif) * 100), 100)
                 : 0;
               return (
-                <Card key={caisse.id} style={styles.itemCard} variant="elevated">
+                <Card key={caisse.id} style={styles.itemCard} variant="elevated" enterIndex={i}>
                   <View style={styles.itemTopRow}>
                     <View style={styles.categoryPill}>
                       <Text style={styles.categoryPillText}>Caisse</Text>
@@ -150,16 +253,54 @@ export default function ProjetsScreen() {
                       <Text style={styles.contributeBtnText}>Contribuer à cette caisse</Text>
                     </TouchableOpacity>
                   )}
+                  {staff && caisse.statut === 'OUVERTE' ? (
+                    <TouchableOpacity
+                      style={styles.closeStaffBtn}
+                      onPress={() => {
+                        Alert.alert(
+                          'Clôturer cette caisse ?',
+                          `Marquer « ${caisse.nom} » comme terminée ?`,
+                          [
+                            { text: 'Annuler', style: 'cancel' },
+                            { text: 'Oui', onPress: () => closeProjectCaisse(caisse.id) },
+                          ]
+                        );
+                      }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.closeStaffBtnText}>Marquer terminée</Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </Card>
               );
-            })}
+            })
+            )}
+            <PaginationBar
+              page={caissesPage.page}
+              totalPages={caissesPage.totalPages}
+              total={caissesPage.total}
+              from={caissesPage.from}
+              to={caissesPage.to}
+              onPageChange={caissesPage.setPage}
+              label="caisses"
+            />
           </View>
         )}
 
         {/* PROJETS LIST */}
         {activeTab === 'PROJETS' && (
           <View style={styles.listContainer}>
-            {filteredProjets.map((proj) => {
+            {filteredProjets.length === 0 ? (
+              <View style={styles.emptyBlock}>
+                <Text style={styles.emptyHint}>Aucun projet.</Text>
+                {staff ? (
+                  <TouchableOpacity onPress={() => router.push('/projet/nouveau')}>
+                    <Text style={styles.emptyLink}>Créer un projet</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : (
+            projetsPage.pageItems.map((proj, i) => {
               const progressPct = Math.min(
                 Math.round((proj.montantCollecte / proj.objectif) * 100),
                 100
@@ -170,6 +311,7 @@ export default function ProjetsScreen() {
                   key={proj.id}
                   style={styles.itemCard}
                   variant="elevated"
+                  enterIndex={i}
                   onPress={() => router.push(`/projet/${proj.id}`)}
                 >
                   <View style={styles.itemTopRow}>
@@ -233,18 +375,39 @@ export default function ProjetsScreen() {
                   </View>
                 </Card>
               );
-            })}
+            })
+            )}
+            <PaginationBar
+              page={projetsPage.page}
+              totalPages={projetsPage.totalPages}
+              total={projetsPage.total}
+              from={projetsPage.from}
+              to={projetsPage.to}
+              onPageChange={projetsPage.setPage}
+              label="projets"
+            />
           </View>
         )}
 
         {/* EVENEMENTS LIST */}
         {activeTab === 'EVENEMENTS' && (
           <View style={styles.listContainer}>
-            {filteredEvenements.map((ev) => (
+            {filteredEvenements.length === 0 ? (
+              <View style={styles.emptyBlock}>
+                <Text style={styles.emptyHint}>Aucun événement.</Text>
+                {staff ? (
+                  <TouchableOpacity onPress={() => router.push('/evenement/nouveau')}>
+                    <Text style={styles.emptyLink}>Créer un événement</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            ) : (
+            eventsPage.pageItems.map((ev, i) => (
               <Card
                 key={ev.id}
                 style={styles.itemCard}
                 variant="elevated"
+                enterIndex={i}
                 onPress={() => router.push(`/evenement/${ev.id}`)}
               >
                 <View style={styles.itemTopRow}>
@@ -297,10 +460,21 @@ export default function ProjetsScreen() {
                   </View>
                 </View>
               </Card>
-            ))}
+            ))
+            )}
+            <PaginationBar
+              page={eventsPage.page}
+              totalPages={eventsPage.totalPages}
+              total={eventsPage.total}
+              from={eventsPage.from}
+              to={eventsPage.to}
+              onPageChange={eventsPage.setPage}
+              label="événements"
+            />
           </View>
         )}
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -320,6 +494,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 16,
     marginBottom: 16,
+  },
+  filterRow: {
+    paddingHorizontal: 20,
+    marginBottom: 12,
   },
   searchBar: {
     flexDirection: 'row',
@@ -516,5 +694,71 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: AppColors.primary,
+  },
+  emptyHint: {
+    fontSize: 13,
+    color: AppColors.textMuted,
+    textAlign: 'center',
+    paddingVertical: 8,
+  },
+  emptyBlock: {
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 8,
+  },
+  emptyLink: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: AppColors.primary,
+  },
+  headerCreateBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  staffBanner: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: AppColors.white,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: AppColors.borderLight,
+    gap: 10,
+  },
+  staffBannerText: {
+    fontSize: 13,
+    color: AppColors.textSecondary,
+    lineHeight: 18,
+  },
+  staffBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: AppColors.primary,
+    borderRadius: 12,
+    paddingVertical: 11,
+  },
+  staffBannerBtnText: {
+    color: AppColors.white,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  closeStaffBtn: {
+    marginTop: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: AppColors.borderLight,
+  },
+  closeStaffBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppColors.textSecondary,
   },
 });

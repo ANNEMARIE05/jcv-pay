@@ -13,6 +13,8 @@ import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { TabsSelector } from '@/components/common/TabsSelector';
 import { useNotificationStore } from '@/store/notificationStore';
+import { ListSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 export default function NotificationsScreen() {
   const notifications = useNotificationStore((s) => s.notifications);
@@ -20,6 +22,7 @@ export default function NotificationsScreen() {
   const markAllAsRead = useNotificationStore((s) => s.markAllAsRead);
 
   const [filter, setFilter] = useState<'TOUTES' | 'NON_LUES' | 'PAIEMENT' | 'PROJET'>('TOUTES');
+  const ready = useScreenReady(500);
 
   const filtered = useMemo(() => {
     switch (filter) {
@@ -64,7 +67,6 @@ export default function NotificationsScreen() {
     <View style={styles.container}>
       <Header
         title="Notifications"
-        subtitle="Centre d alertes & rappels"
         showBack
         onBack={() => {
           if (router.canGoBack()) router.back();
@@ -78,6 +80,9 @@ export default function NotificationsScreen() {
         }
       />
 
+      {!ready ? (
+        <ListSkeleton count={5} />
+      ) : (
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -111,13 +116,14 @@ export default function NotificationsScreen() {
               <Text style={styles.emptySubtitle}>Vous êtes parfaitement à jour.</Text>
             </View>
           ) : (
-            filtered.map((notif) => {
+            filtered.map((notif, i) => {
               const iconConfig = getNotifIcon(notif.type);
               return (
                 <Card
                   key={notif.id}
                   style={[styles.notifCard, !notif.lue && styles.unreadCard]}
                   onPress={() => handlePressNotif(notif)}
+                  enterIndex={i}
                 >
                   <View style={styles.notifRow}>
                     <View style={[styles.iconCircle, { backgroundColor: iconConfig.bg }]}>
@@ -145,6 +151,7 @@ export default function NotificationsScreen() {
           )}
         </View>
       </ScrollView>
+      )}
     </View>
   );
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,16 @@ import {
   Image,
 } from 'react-native';
 import { router } from 'expo-router';
+import Animated, {
+  Easing,
+  FadeIn,
+  FadeInDown,
+  FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import { AppColors } from '@/constants/colors';
 import { Button } from '@/components/common/Button';
 
@@ -17,34 +27,50 @@ const logo = require('../../../assets/images/jcv-square-icon.png');
 const { width } = Dimensions.get('window');
 
 export default function SplashScreen() {
+  const floatY = useSharedValue(0);
+
+  useEffect(() => {
+    floatY.value = withRepeat(
+      withTiming(-8, { duration: 1400, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true
+    );
+  }, [floatY]);
+
+  const logoMotion = useAnimatedStyle(() => ({
+    transform: [{ translateY: floatY.value }],
+  }));
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <View style={styles.topSpacer} />
 
-        <View style={styles.brandContainer}>
-          <Image
-            source={logo}
-            style={styles.logo}
-            resizeMode="contain"
-            accessibilityLabel="Logo JCV Pay"
-          />
+        <Animated.View entering={FadeIn.duration(500)} style={styles.brandContainer}>
+          <Animated.View style={logoMotion}>
+            <Image
+              source={logo}
+              style={styles.logo}
+              resizeMode="contain"
+              accessibilityLabel="Logo JCV Pay"
+            />
+          </Animated.View>
 
-          <View style={styles.titleRow}>
+          <Animated.View entering={FadeInDown.delay(180).duration(450)} style={styles.titleRow}>
             <Text style={styles.titlePrimary}>JCV</Text>
             <Text style={styles.titleAccent}>Pay</Text>
-          </View>
-          <Text style={styles.subtitle}>
+          </Animated.View>
+          <Animated.Text entering={FadeInDown.delay(280).duration(450)} style={styles.subtitle}>
             Église Jésus Christ Victoire • Finances & Contributions
-          </Text>
-        </View>
+          </Animated.Text>
+        </Animated.View>
 
         <View style={styles.arcContainer}>
           <View style={styles.arcOuter} />
           <View style={styles.arcInner} />
         </View>
 
-        <View style={styles.actionsContainer}>
+        <Animated.View entering={FadeInUp.delay(360).duration(480)} style={styles.actionsContainer}>
           <Button
             title="Se connecter"
             onPress={() => router.push('/(auth)/login')}
@@ -68,7 +94,7 @@ export default function SplashScreen() {
           >
             <Text style={styles.skipText}>Accéder directement à l application →</Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       </View>
     </SafeAreaView>
   );

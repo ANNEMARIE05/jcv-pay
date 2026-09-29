@@ -3,10 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -17,6 +14,8 @@ import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { useAuthStore } from '@/store/authStore';
+import { FullScreenLoader } from '@/components/motion/BrandedLoader';
+import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 
 export default function RegisterScreen() {
   const [nomComplet, setNomComplet] = useState('');
@@ -62,29 +61,31 @@ export default function RegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScreen
       style={styles.keyboardContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Teal Header */}
+      contentContainerStyle={styles.scrollContent}
+      header={
         <Header
           title="Créer un compte"
           subtitle="Get Started Today"
           showBack
           variant="curved"
         />
-
-        {/* Overlapping White Form Card */}
+      }
+      overlay={
+        loading ? (
+          <FullScreenLoader
+            title="Création du compte"
+            subtitle="Préparation de votre espace membre"
+          />
+        ) : null
+      }
+    >
         <View style={styles.cardContainer}>
           <Card style={styles.formCard}>
             <Input
               label="Nom & Prénom"
-              placeholder="Ex: Shahinur Rahman"
+              placeholder="Ex: Ezekiel"
               value={nomComplet}
               onChangeText={setNomComplet}
               leftIcon={<Ionicons name="person-outline" size={20} color={AppColors.textSecondary} />}
@@ -92,7 +93,7 @@ export default function RegisterScreen() {
 
             <Input
               label="Adresse Email"
-              placeholder="ex: shahinur@gmail.com"
+              placeholder="ex: ezekiel@gmail.com"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -171,8 +172,7 @@ export default function RegisterScreen() {
             </View>
           </Card>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScreen>
   );
 }
 
@@ -180,6 +180,7 @@ const styles = StyleSheet.create({
   keyboardContainer: {
     flex: 1,
     backgroundColor: AppColors.background,
+    position: 'relative',
   },
   container: {
     flex: 1,
@@ -189,7 +190,7 @@ const styles = StyleSheet.create({
   },
   cardContainer: {
     paddingHorizontal: 20,
-    marginTop: -16,
+    marginTop: 8,
   },
   formCard: {
     padding: 24,

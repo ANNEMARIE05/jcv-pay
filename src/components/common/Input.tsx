@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+'use no memo';
+
+import React, { useRef, useState } from 'react';
 import {
   View,
   TextInput,
@@ -10,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { AppColors } from '@/constants/colors';
+import { useKeyboardScroll } from '@/components/common/KeyboardAwareScreen';
 
 interface InputProps extends TextInputProps {
   label?: string;
@@ -25,33 +28,65 @@ export const Input: React.FC<InputProps> = ({
   leftIcon,
   isPassword = false,
   containerStyle,
+  onFocus,
+  onBlur,
+  style,
   ...props
 }) => {
   const [isFocused, setIsFocused] = useState(false);
-  const [showPassword, setShowPassword] = useState(!isPassword);
+  const [showPassword, setShowPassword] = useState(false);
+  const wrapRef = useRef<View>(null);
+  const inputRef = useRef<TextInput>(null);
+  const keyboardScroll = useKeyboardScroll();
+
+  const revealField = () => {
+    const run = () => {
+      wrapRef.current?.measureInWindow((_x, y, _w, h) => {
+        keyboardScroll?.ensureVisible(y, h);
+      });
+    };
+    run();
+    setTimeout(run, 80);
+    setTimeout(run, 280);
+    setTimeout(run, 450);
+  };
 
   return (
-    <View style={[styles.wrapper, containerStyle]}>
-      {label && <Text style={styles.label}>{label}</Text>}
+    <View ref={wrapRef} style={[styles.wrapper, containerStyle]} collapsable={false}>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
       <View
         style={[
           styles.container,
           isFocused && styles.focused,
           !!error && styles.errorContainer,
         ]}
+        collapsable={false}
       >
-        {leftIcon && <View style={styles.leftIconContainer}>{leftIcon}</View>}
+        {leftIcon ? <View style={styles.leftIconContainer}>{leftIcon}</View> : null}
 
         <TextInput
-          style={styles.input}
+          {...props}
+          ref={inputRef}
+          style={[styles.input, style]}
           placeholderTextColor={AppColors.textMuted}
           secureTextEntry={isPassword && !showPassword}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          {...props}
+          underlineColorAndroid="transparent"
+          textAlignVertical="center"
+          editable={props.editable !== false}
+          showSoftInputOnFocus
+          importantForAutofill="yes"
+          onFocus={(event) => {
+            setIsFocused(true);
+            revealField();
+            onFocus?.(event);
+          }}
+          onBlur={(event) => {
+            setIsFocused(false);
+            onBlur?.(event);
+          }}
         />
 
-        {isPassword && (
+        {isPassword ? (
           <TouchableOpacity
             style={styles.eyeButton}
             onPress={() => setShowPassword((prev) => !prev)}
@@ -63,7 +98,7 @@ export const Input: React.FC<InputProps> = ({
               color={AppColors.textSecondary}
             />
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
     </View>
@@ -89,16 +124,11 @@ const styles = StyleSheet.create({
     borderColor: AppColors.border,
     borderRadius: 16,
     paddingHorizontal: 14,
-    height: 52,
+    minHeight: 52,
   },
   focused: {
     borderColor: AppColors.primary,
     backgroundColor: AppColors.white,
-    shadowColor: AppColors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
   },
   errorContainer: {
     borderColor: AppColors.danger,
@@ -111,7 +141,9 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    height: '100%',
+    minWidth: 0,
+    minHeight: 48,
+    paddingVertical: 12,
     color: AppColors.textPrimary,
     fontSize: 14,
   },

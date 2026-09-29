@@ -3,10 +3,8 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Alert,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -17,6 +15,7 @@ import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
+import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 import { useAuthStore } from '@/store/authStore';
 import { TypeContribution } from '@/types';
 
@@ -51,14 +50,14 @@ export default function NouvelleContributionScreen() {
   const [amount, setAmount] = useState<string>(params.preselectedAmount || '25000');
   const [titre, setTitre] = useState<string>(params.titre || '');
   const [donateurNom, setDonateurNom] = useState<string>(
-    user ? `${user.prenom} ${user.nom}` : ''
+    user ? `${user.prenom} ${user.nom}`.trim() : ''
   );
   const [telephone, setTelephone] = useState<string>(user?.telephone || '');
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [donateForOther, setDonateForOther] = useState(false);
   const [intention, setIntention] = useState('');
 
-  const currentUserName = user ? `${user.prenom} ${user.nom}` : 'Shahinur Rahman';
+  const currentUserName = user ? `${user.prenom} ${user.nom}`.trim() : 'Ezekiel';
   const currentUserPhone = user?.telephone || '+225 07 48 92 10 33';
 
   const handleProceed = () => {
@@ -101,11 +100,10 @@ export default function NouvelleContributionScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.keyboardContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.container}>
+    <KeyboardAwareScreen
+      style={styles.container}
+      contentContainerStyle={[styles.scrollContent, { paddingBottom: 32 }]}
+      header={
         <Header
           title="Nouvelle contribution"
           subtitle="Don & Engagement financier"
@@ -116,12 +114,25 @@ export default function NouvelleContributionScreen() {
           }}
           variant="curved"
         />
-
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: 90 + bottomInset }]}
-          showsVerticalScrollIndicator={false}
-        >
+      }
+      footer={
+        <View style={[styles.bottomBar, { paddingBottom: bottomInset }]}>
+          <View>
+            <Text style={styles.bottomLabel}>Montant à valider</Text>
+            <Text style={styles.bottomValue}>
+              {parseInt(amount || '0', 10).toLocaleString('fr-FR')} FCFA
+            </Text>
+          </View>
+          <Button
+            title="Voir comment verser"
+            onPress={handleProceed}
+            size="lg"
+            variant="primary"
+            style={styles.bottomBtn}
+          />
+        </View>
+      }
+    >
           {/* Section 1: Type de contribution */}
           <View style={styles.cardWrapper}>
             <Card style={styles.card} variant="elevated">
@@ -266,7 +277,7 @@ export default function NouvelleContributionScreen() {
 
               {/* Champs conditionnels si donner pour un tiers */}
               {donateForOther && !isAnonymous && (
-                <View style={styles.customBeneficiaryBox}>
+                <View style={styles.customBeneficiaryBox} pointerEvents="auto">
                   <Input
                     label="Nom & Prénom du bénéficiaire / proche"
                     placeholder="Ex: Famille Kouamé"
@@ -297,26 +308,7 @@ export default function NouvelleContributionScreen() {
               />
             </Card>
           </View>
-        </ScrollView>
-
-        {/* Bottom CTA */}
-        <View style={[styles.bottomBar, { paddingBottom: bottomInset }]}>
-          <View>
-            <Text style={styles.bottomLabel}>Montant à valider</Text>
-            <Text style={styles.bottomValue}>
-              {parseInt(amount || '0', 10).toLocaleString('fr-FR')} FCFA
-            </Text>
-          </View>
-          <Button
-            title="Continuer"
-            onPress={handleProceed}
-            size="lg"
-            variant="primary"
-            style={styles.bottomBtn}
-          />
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScreen>
   );
 }
 
@@ -518,23 +510,14 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: AppColors.white,
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: AppColors.borderLight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 8,
   },
   bottomLabel: {
     fontSize: 11,

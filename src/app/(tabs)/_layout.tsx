@@ -1,15 +1,23 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, View, StyleSheet } from 'react-native';
+import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppColors } from '@/constants/colors';
 import { useAuthStore } from '@/store/authStore';
+import { canManageMoney, canManagePeople, isStaff } from '@/constants/roles';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
-  const isAdmin = user?.role === 'ADMINISTRATEUR' || user?.role === 'TRESORIER';
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAdmin = canManagePeople(user?.role);
+  const isTreasurer = canManageMoney(user?.role);
+  const staff = isStaff(user?.role);
+
+  if (!isAuthenticated) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   // Generous padding to prevent overlap with Android navigation buttons (||| O <) and iOS indicator
   const bottomInset = Platform.OS === 'android'
@@ -22,6 +30,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: AppColors.primary,
         tabBarInactiveTintColor: AppColors.textMuted,
         tabBarStyle: {
@@ -42,15 +51,28 @@ export default function TabsLayout() {
           fontWeight: '600',
           marginTop: 2,
         },
+        animation: 'fade',
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Accueil',
+          title: isAdmin ? 'Gestion' : isTreasurer ? 'Caisse' : 'Accueil',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'home' : 'home-outline'}
+              name={
+                isAdmin
+                  ? focused
+                    ? 'people'
+                    : 'people-outline'
+                  : isTreasurer
+                    ? focused
+                      ? 'cash'
+                      : 'cash-outline'
+                    : focused
+                      ? 'home'
+                      : 'home-outline'
+              }
               size={22}
               color={color}
             />
@@ -87,6 +109,21 @@ export default function TabsLayout() {
       />
 
       <Tabs.Screen
+        name="payeurs"
+        options={{
+          title: 'Payeurs',
+          href: staff ? undefined : null,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons
+              name={focused ? 'people' : 'people-outline'}
+              size={22}
+              color={color}
+            />
+          ),
+        }}
+      />
+
+      <Tabs.Screen
         name="recus"
         options={{
           title: 'Mes Reçus',
@@ -103,44 +140,16 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="profil"
         options={{
-          title: isAdmin ? 'Admin & Profil' : 'Profil',
+          title: 'Profil',
           tabBarIcon: ({ color, focused }) => (
-            <View style={styles.profileTabIcon}>
-              <Ionicons
-                name={
-                  isAdmin
-                    ? focused
-                      ? 'shield-checkmark'
-                      : 'shield-checkmark-outline'
-                    : focused
-                    ? 'person'
-                    : 'person-outline'
-                }
-                size={22}
-                color={isAdmin ? AppColors.accent : color}
-              />
-              {isAdmin && <View style={styles.adminDot} />}
-            </View>
+            <Ionicons
+              name={focused ? 'person' : 'person-outline'}
+              size={22}
+              color={color}
+            />
           ),
         }}
       />
     </Tabs>
   );
 }
-
-const styles = StyleSheet.create({
-  profileTabIcon: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  adminDot: {
-    position: 'absolute',
-    top: -2,
-    right: -3,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: AppColors.accent,
-  },
-});

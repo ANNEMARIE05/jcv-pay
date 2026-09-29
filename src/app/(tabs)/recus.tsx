@@ -12,35 +12,65 @@ import { AppColors, Shadows } from '@/constants/colors';
 import { Header } from '@/components/common/Header';
 import { Badge } from '@/components/common/Badge';
 import { TabsSelector } from '@/components/common/TabsSelector';
+import { SearchBar } from '@/components/common/SearchBar';
+import { PaginationBar } from '@/components/common/PaginationBar';
+import { usePagedList } from '@/hooks/usePagedList';
 import { useFinanceStore } from '@/store/financeStore';
+import { TicketSkeleton } from '@/components/motion/Skeleton';
+import { FadeInView } from '@/components/motion/FadeIn';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 export default function RecusScreen() {
   const recus = useFinanceStore((s) => s.recus);
 
   const [activeTab, setActiveTab] = useState<'TOUS' | 'VALIDE' | 'EN_ATTENTE'>('TOUS');
+  const [searchQuery, setSearchQuery] = useState('');
+  const ready = useScreenReady(560);
 
   const filteredRecus = useMemo(() => {
-    if (activeTab === 'TOUS') return recus;
-    return recus.filter((r) => r.statut === activeTab);
-  }, [recus, activeTab]);
+    const q = searchQuery.trim().toLowerCase();
+    return recus.filter((r) => {
+      const statusOk = activeTab === 'TOUS' || r.statut === activeTab;
+      const searchOk =
+        !q ||
+        r.titre.toLowerCase().includes(q) ||
+        r.donateurNom.toLowerCase().includes(q) ||
+        r.numeroRecu.toLowerCase().includes(q) ||
+        r.donateurTelephone.toLowerCase().includes(q);
+      return statusOk && searchOk;
+    });
+  }, [recus, activeTab, searchQuery]);
+
+  const page = usePagedList(filteredRecus, 8, `${activeTab}|${searchQuery}`);
 
   return (
     <View style={styles.container}>
       {/* Deep Teal Header (Screen 13 style) */}
       <Header
-        title="Mes Reçus & Billets"
-        subtitle="Quittances et justificatifs de paiement"
+        title="Reçus"
         showBack
         onBack={() => router.replace('/(tabs)')}
         variant="curved"
       />
 
+      {!ready ? (
+        <TicketSkeleton />
+      ) : (
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Segmented Filter Bar (Screen 13 tabs: Ongoing, Completed, Canceled) */}
+        <View style={styles.tabsContainer}>
+          <SearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Rechercher un reçu, un nom, un n°…"
+          />
+        </View>
+
         <View style={styles.tabsContainer}>
           <TabsSelector
             tabs={[
@@ -73,10 +103,11 @@ export default function RecusScreen() {
               </Text>
             </View>
           ) : (
-            filteredRecus.map((recu) => {
+            page.pageItems.map((recu, i) => {
               const isValid = recu.statut === 'VALIDE';
 
               return (
+                <FadeInView key={recu.id} index={i}>
                 <TouchableOpacity
                   key={recu.id}
                   style={styles.ticketCard}
@@ -111,6 +142,7 @@ export default function RecusScreen() {
                   {/* Ticket Body */}
                   <View style={styles.ticketBody}>
                     <Text style={styles.contributionTitle}>{recu.titre}</Text>
+                    <Text style={styles.label}>{recu.donateurNom}</Text>
 
                     <View style={styles.infoGrid}>
                       <View style={styles.infoCol}>
@@ -140,11 +172,22 @@ export default function RecusScreen() {
                     </View>
                   </View>
                 </TouchableOpacity>
+                </FadeInView>
               );
             })
           )}
+          <PaginationBar
+            page={page.page}
+            totalPages={page.totalPages}
+            total={page.total}
+            from={page.from}
+            to={page.to}
+            onPageChange={page.setPage}
+            label="reçus"
+          />
         </View>
       </ScrollView>
+      )}
     </View>
   );
 }

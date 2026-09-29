@@ -11,7 +11,7 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AppColors, Shadows } from '@/constants/colors';
@@ -19,9 +19,15 @@ import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
+import { KeyboardSpacer } from '@/components/common/KeyboardAwareScreen';
+import { scrollInputIntoView } from '@/utils/scrollInputIntoView';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
 import { SourceCaisse } from '@/types';
+import { ListSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
+import { isStaff } from '@/constants/roles';
+import { PayersDirectory } from '@/components/finance/PayersDirectory';
 
 type TresorerieTab =
   | 'VUE_GLOBALE'
@@ -55,7 +61,6 @@ export default function TresorerieScreen() {
   const [showCashModal, setShowCashModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showNewCaisseModal, setShowNewCaisseModal] = useState(false);
-  const [expandedPayer, setExpandedPayer] = useState<string | null>(null);
 
   const [cashDonorName, setCashDonorName] = useState('');
   const [cashDonorPhone, setCashDonorPhone] = useState('+225 ');
@@ -71,12 +76,17 @@ export default function TresorerieScreen() {
   const [newCaisseNom, setNewCaisseNom] = useState('');
   const [newCaisseDesc, setNewCaisseDesc] = useState('');
   const [newCaisseObjectif, setNewCaisseObjectif] = useState('');
+  const ready = useScreenReady(640);
 
   const pendingPayments = transactions.filter((t) => t.statut === 'EN_ATTENTE');
   const validatedPayments = transactions.filter((t) => t.statut === 'VALIDE');
   const payers = getPayersSummary();
   const soldeRestant =
     tresorerie.entreesMois - tresorerie.sortiesMois;
+
+  if (!isStaff(user?.role)) {
+    return <Redirect href="/(tabs)" />;
+  }
 
   const handleRecordCash = () => {
     if (!cashDonorName.trim() || !cashAmount.trim()) {
@@ -144,7 +154,7 @@ export default function TresorerieScreen() {
       montant: amt,
       motif: withdrawMotif.trim(),
       source: withdrawSource,
-      auteur: user ? `${user.prenom} ${user.nom}` : 'Trésorier',
+      auteur: user ? `${user.prenom} ${user.nom}`.trim() : 'Trésorier',
       beneficiaire: withdrawBeneficiaire.trim() || undefined,
     });
 
@@ -203,6 +213,9 @@ export default function TresorerieScreen() {
         }
       />
 
+      {!ready ? (
+        <ListSkeleton count={5} />
+      ) : (
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 + bottomInset }]}
@@ -217,7 +230,7 @@ export default function TresorerieScreen() {
               </View>
               <View style={{ flex: 1, marginLeft: 12 }}>
                 <Text style={styles.officerName}>
-                  {user ? `${user.prenom} ${user.nom}` : 'Trésorier'}
+                  {user ? `${user.prenom} ${user.nom}`.trim() : 'Trésorier'}
                 </Text>
                 <Text style={styles.officerRole}>Vue globale de la caisse • Mise à jour automatique</Text>
               </View>
@@ -380,6 +393,30 @@ export default function TresorerieScreen() {
 
               <TouchableOpacity
                 style={styles.actionGridCard}
+                onPress={() => router.push('/projet/nouveau')}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.gridIconCircle, { backgroundColor: '#E0F2FE' }]}>
+                  <Ionicons name="add-circle" size={24} color="#0284C7" />
+                </View>
+                <Text style={styles.gridActionTitle}>Nouveau projet</Text>
+                <Text style={styles.gridActionSub}>Publier une collecte pour l Église</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionGridCard}
+                onPress={() => router.push('/caisse/nouvelle')}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.gridIconCircle, { backgroundColor: '#FEF3C7' }]}>
+                  <Ionicons name="wallet" size={24} color="#D97706" />
+                </View>
+                <Text style={styles.gridActionTitle}>Nouvelle caisse</Text>
+                <Text style={styles.gridActionSub}>Ouvrir une caisse visible aux fidèles</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.actionGridCard}
                 onPress={() => setActiveTab('PAYEURS')}
                 activeOpacity={0.8}
               >
@@ -464,75 +501,12 @@ export default function TresorerieScreen() {
           </View>
         )}
 
-        {/* TAB: QUI A PAYÉ + HISTORIQUES */}
         {activeTab === 'PAYEURS' && (
           <View style={styles.tabBody}>
             <Text style={styles.inlineHint}>
-              Tapez sur un membre pour voir quand il a payé, combien, et pourquoi.
+              Tous les inscrits et tous les versements, y compris en attente ou rejetés.
             </Text>
-            {payers.map((p) => {
-              const isOpen = expandedPayer === p.telephone;
-              return (
-                <Card key={p.telephone} style={styles.payerCard} variant="elevated">
-                  <TouchableOpacity
-                    style={styles.payerHeader}
-                    onPress={() => setExpandedPayer(isOpen ? null : p.telephone)}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.payerAvatar}>
-                      <Ionicons name="person" size={18} color={AppColors.primary} />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 10 }}>
-                      <Text style={styles.payerName}>{p.nom}</Text>
-                      <Text style={styles.payerMeta}>
-                        {p.telephone} • {p.nbPaiements} opération{p.nbPaiements > 1 ? 's' : ''}
-                      </Text>
-                      <Text style={styles.payerLast}>Dernier : {p.dernierPaiement}</Text>
-                    </View>
-                    <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={styles.payerTotal}>
-                        {p.totalPaye.toLocaleString('fr-FR')} F
-                      </Text>
-                      <Ionicons
-                        name={isOpen ? 'chevron-up' : 'chevron-down'}
-                        size={16}
-                        color={AppColors.textMuted}
-                      />
-                    </View>
-                  </TouchableOpacity>
-
-                  {isOpen && (
-                    <View style={styles.payerHistory}>
-                      {p.transactions.map((tx) => (
-                        <TouchableOpacity
-                          key={tx.id}
-                          style={styles.payerTxRow}
-                          onPress={() => router.push(`/recu/${tx.id}`)}
-                          activeOpacity={0.8}
-                        >
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.payerTxTitle}>{tx.titre}</Text>
-                            <Text style={styles.payerTxDate}>
-                              {tx.date} • {tx.heure} • {tx.type}
-                            </Text>
-                          </View>
-                          <View style={{ alignItems: 'flex-end' }}>
-                            <Text style={styles.payerTxAmount}>
-                              {tx.montant.toLocaleString('fr-FR')} F
-                            </Text>
-                            <Badge
-                              label={tx.statut === 'VALIDE' ? 'Validé' : 'Attente'}
-                              variant={tx.statut === 'VALIDE' ? 'success' : 'warning'}
-                              size="sm"
-                            />
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </Card>
-              );
-            })}
+            <PayersDirectory />
           </View>
         )}
 
@@ -588,7 +562,7 @@ export default function TresorerieScreen() {
           <View style={styles.tabBody}>
             <TouchableOpacity
               style={styles.openCaisseBtn}
-              onPress={() => setShowNewCaisseModal(true)}
+              onPress={() => router.push('/caisse/nouvelle')}
               activeOpacity={0.85}
             >
               <Ionicons name="add-circle" size={20} color={AppColors.white} />
@@ -764,11 +738,12 @@ export default function TresorerieScreen() {
           </View>
         )}
       </ScrollView>
+      )}
 
       {/* MODAL D'ENCAISSEMENT ESPÈCES DIRECT */}
       <Modal visible={showCashModal} animationType="slide" transparent>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={styles.modalContainer}>
@@ -782,7 +757,12 @@ export default function TresorerieScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalBody}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               <Text style={styles.inputLabel}>Type de Contribution *</Text>
               <View style={styles.typeSelectorRow}>
                 {[
@@ -806,6 +786,7 @@ export default function TresorerieScreen() {
               <Text style={styles.inputLabel}>Nom complet du Donateur / Membre *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: Jean-Marc Kouassi"
                 value={cashDonorName}
                 onChangeText={setCashDonorName}
@@ -814,6 +795,7 @@ export default function TresorerieScreen() {
               <Text style={styles.inputLabel}>Numéro de Téléphone (Optionnel)</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="+225 07 00 00 00 00"
                 keyboardType="phone-pad"
                 value={cashDonorPhone}
@@ -823,6 +805,7 @@ export default function TresorerieScreen() {
               <Text style={styles.inputLabel}>Montant Reçu en Espèces (FCFA) *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: 50000"
                 keyboardType="numeric"
                 value={cashAmount}
@@ -832,6 +815,7 @@ export default function TresorerieScreen() {
               <Text style={styles.inputLabel}>Motif / Intitulé</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: Dîme de reconnaissance"
                 value={cashTitle}
                 onChangeText={setCashTitle}
@@ -844,6 +828,7 @@ export default function TresorerieScreen() {
                 size="lg"
                 style={{ marginTop: 16, marginBottom: 20 }}
               />
+            <KeyboardSpacer />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -851,7 +836,7 @@ export default function TresorerieScreen() {
       {/* MODAL RETRAIT CAISSE */}
       <Modal visible={showWithdrawModal} animationType="slide" transparent>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={styles.modalContainer}>
@@ -867,7 +852,12 @@ export default function TresorerieScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalBody}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               <Text style={styles.inputLabel}>Source du retrait *</Text>
               <View style={styles.typeSelectorRow}>
                 {(
@@ -898,6 +888,7 @@ export default function TresorerieScreen() {
               <Text style={styles.inputLabel}>Montant à retirer (FCFA) *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: 100000"
                 keyboardType="numeric"
                 value={withdrawAmount}
@@ -907,6 +898,7 @@ export default function TresorerieScreen() {
               <Text style={styles.inputLabel}>Motif / Pourquoi *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: Achat fournitures, frais mission..."
                 value={withdrawMotif}
                 onChangeText={setWithdrawMotif}
@@ -915,6 +907,7 @@ export default function TresorerieScreen() {
               <Text style={styles.inputLabel}>Bénéficiaire (optionnel)</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: Fournisseur, responsable..."
                 value={withdrawBeneficiaire}
                 onChangeText={setWithdrawBeneficiaire}
@@ -927,6 +920,7 @@ export default function TresorerieScreen() {
                 size="lg"
                 style={{ marginTop: 16, marginBottom: 20 }}
               />
+            <KeyboardSpacer />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
@@ -934,7 +928,7 @@ export default function TresorerieScreen() {
 
       <Modal visible={showNewCaisseModal} animationType="slide" transparent>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior="padding"
           style={styles.modalOverlay}
         >
           <View style={styles.modalContainer}>
@@ -950,10 +944,16 @@ export default function TresorerieScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.modalBody}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={styles.modalBody}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+            >
               <Text style={styles.inputLabel}>Nom de la caisse *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: Caisse Climatisation Temple"
                 value={newCaisseNom}
                 onChangeText={setNewCaisseNom}
@@ -962,6 +962,7 @@ export default function TresorerieScreen() {
               <Text style={styles.inputLabel}>Description</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="Pour quoi cette caisse est ouverte"
                 value={newCaisseDesc}
                 onChangeText={setNewCaisseDesc}
@@ -970,6 +971,7 @@ export default function TresorerieScreen() {
               <Text style={styles.inputLabel}>Objectif (FCFA) *</Text>
               <TextInput
                 style={styles.modalInput}
+                onFocus={scrollInputIntoView}
                 placeholder="ex: 5000000"
                 keyboardType="numeric"
                 value={newCaisseObjectif}
@@ -1002,6 +1004,7 @@ export default function TresorerieScreen() {
                 size="lg"
                 style={{ marginTop: 16, marginBottom: 20 }}
               />
+            <KeyboardSpacer />
             </ScrollView>
           </View>
         </KeyboardAvoidingView>

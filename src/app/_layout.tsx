@@ -23,7 +23,28 @@ export default function RootLayout() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen
+          name="projet/nouveau"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
           name="projet/[id]"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="caisse/nouvelle"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="evenement/nouveau"
           options={{
             headerShown: false,
             presentation: 'card',
@@ -59,6 +80,13 @@ export default function RootLayout() {
         />
         <Stack.Screen
           name="notifications"
+          options={{
+            headerShown: false,
+            presentation: 'card',
+          }}
+        />
+        <Stack.Screen
+          name="affichage"
           options={{
             headerShown: false,
             presentation: 'card',

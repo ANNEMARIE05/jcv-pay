@@ -3,10 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -16,6 +13,7 @@ import { Header } from '@/components/common/Header';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
+import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
@@ -41,22 +39,18 @@ export default function ForgotPasswordScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScreen
       style={styles.keyboardContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+      contentContainerStyle={styles.scrollContent}
+      header={
         <Header
           title="Mot de passe oublié"
           subtitle="Forgot Password"
           showBack
           variant="curved"
         />
-
+      }
+    >
         <View style={styles.cardContainer}>
           <Card style={styles.formCard}>
             <View style={styles.iconContainer}>
@@ -71,7 +65,7 @@ export default function ForgotPasswordScreen() {
 
             <Input
               label="Adresse Email"
-              placeholder="ex: shahinur@gmail.com"
+              placeholder="ex: ezekiel@gmail.com"
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -97,8 +91,7 @@ export default function ForgotPasswordScreen() {
             </TouchableOpacity>
           </Card>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScreen>
   );
 }
 
@@ -115,7 +108,7 @@ const styles = StyleSheet.create({
   },
   cardContainer: {
     paddingHorizontal: 20,
-    marginTop: -16,
+    marginTop: 8,
   },
   formCard: {
     padding: 24,

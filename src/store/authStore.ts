@@ -1,13 +1,15 @@
 import { create } from 'zustand';
-import { Utilisateur, RoleUtilisateur } from '@/types';
-import { mockMembre, mockAdmin } from '@/mocks/utilisateurs.mock';
+import { Utilisateur } from '@/types';
+import { mockMembre, mockAdmin, mockTresorier } from '@/mocks/utilisateurs.mock';
+import { RoleUtilisateur } from '@/types';
+import { useFinanceStore } from '@/store/financeStore';
 
 interface AuthState {
   user: Utilisateur | null;
   isAuthenticated: boolean;
   isOnboarded: boolean;
   login: (email: string, mdp: string) => Promise<boolean>;
-  loginAs: (role: 'MEMBRE' | 'ADMINISTRATEUR') => Promise<boolean>;
+  loginAs: (role: 'MEMBRE' | 'TRESORIER' | 'ADMINISTRATEUR') => Promise<boolean>;
   switchRole: () => void;
   register: (data: {
     nom: string;
@@ -22,36 +24,54 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: mockMembre,
-  isAuthenticated: true,
+  user: null,
+  isAuthenticated: false,
   isOnboarded: true,
 
   login: async (email: string, _mdp: string) => {
     await new Promise((resolve) => setTimeout(resolve, 600));
     // If admin email, log in as admin
-    const isAdmin = email.toLowerCase().includes('admin') || email.toLowerCase().includes('tresor');
+    const directory = useFinanceStore.getState().utilisateurs;
+    const found = directory.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+    const lower = email.toLowerCase();
+    const fallback =
+      lower.includes('tresor') || lower.includes('grace')
+        ? mockTresorier
+        : lower.includes('admin') || lower.includes('samuel')
+          ? mockAdmin
+          : { ...mockMembre, email: email || mockMembre.email };
     set({
-      user: isAdmin ? mockAdmin : { ...mockMembre, email: email || mockMembre.email },
+      user: found || fallback,
       isAuthenticated: true,
     });
     return true;
   },
 
-  loginAs: async (role: 'MEMBRE' | 'ADMINISTRATEUR') => {
+  loginAs: async (role: 'MEMBRE' | 'TRESORIER' | 'ADMINISTRATEUR') => {
     await new Promise((resolve) => setTimeout(resolve, 400));
+    const byRole: Record<'MEMBRE' | 'TRESORIER' | 'ADMINISTRATEUR', Utilisateur> = {
+      MEMBRE: mockMembre,
+      TRESORIER: mockTresorier,
+      ADMINISTRATEUR: mockAdmin,
+    };
     set({
-      user: role === 'ADMINISTRATEUR' ? mockAdmin : mockMembre,
+      user: byRole[role],
       isAuthenticated: true,
     });
     return true;
   },
 
   switchRole: () => {
-    const current = get().user;
-    const isCurrentlyAdmin = current?.role === 'ADMINISTRATEUR' || current?.role === 'TRESORIER';
-    set({
-      user: isCurrentlyAdmin ? mockMembre : mockAdmin,
-    });
+    const order: RoleUtilisateur[] = ['MEMBRE', 'TRESORIER', 'ADMINISTRATEUR'];
+    const mocks: Record<'MEMBRE' | 'TRESORIER' | 'ADMINISTRATEUR', Utilisateur> = {
+      MEMBRE: mockMembre,
+      TRESORIER: mockTresorier,
+      ADMINISTRATEUR: mockAdmin,
+    };
+    const current = get().user?.role ?? 'MEMBRE';
+    const idx = order.indexOf(current);
+    const next = order[(idx + 1) % order.length] as 'MEMBRE' | 'TRESORIER' | 'ADMINISTRATEUR';
+    set({ user: mocks[next] });
   },
 
   register: async (data) => {

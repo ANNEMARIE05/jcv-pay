@@ -17,9 +17,10 @@ import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { TypeContribution } from '@/types';
+import { useFinanceStore } from '@/store/financeStore';
 
 interface ChurchEventDay {
-  dateKey: string; // YYYY-MM-DD
+  dateKey: string;
   dayNum: number;
   dayName: string;
   monthName: string;
@@ -36,196 +37,53 @@ interface ChurchEventDay {
   donationTitle: string;
 }
 
-const CHURCH_CALENDAR_DATA: ChurchEventDay[] = [
-  {
-    dateKey: '2026-09-07',
-    dayNum: 7,
-    dayName: 'Lundi',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Communion des Cellules de Maison',
-    category: 'CELLULE',
-    time: '18h30 - 20h00',
-    location: 'Quartiers & Familles hôtes',
-    leader: 'Responsables de Secteurs',
-    description: 'Méditation biblique, prière pour les familles et partage de la Parole.',
-    donationType: 'LIBRE',
-    donationTitle: 'Offrande de Cellule',
-  },
-  {
-    dateKey: '2026-09-08',
-    dayNum: 8,
-    dayName: 'Mardi',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Prière d Intercession & Midi de Délivrance',
-    category: 'VEILLEE',
-    time: '12h00 - 13h30',
-    location: 'Chapelle Haute',
-    leader: 'Département Intercession',
-    description: 'Prière pour les malades, pour la nation et les projets de l Église.',
-    donationType: 'OFFRANDE',
-    donationTitle: 'Offrande d Intercession',
-  },
-  {
-    dateKey: '2026-09-09',
-    dayNum: 9,
-    dayName: 'Mercredi',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Culte d Enseignement & Étude Biblique',
-    category: 'ENSEIGNEMENT',
-    time: '18h30 - 20h30',
-    location: 'Grand Sanctuaire',
-    leader: 'Pasteur Samuel',
-    description: 'Thème approfondi : Les lois divines de la prospérité du Royaume et de la semence.',
-    donationType: 'DIME',
-    donationTitle: 'Dîme & Offrande du Mercredi',
-  },
-  {
-    dateKey: '2026-09-11',
-    dayNum: 11,
-    dayName: 'Vendredi',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Grande Veillée de Prière & Percée Prophétique',
-    category: 'VEILLEE',
-    time: '21h00 - 02h00',
-    location: 'Grand Sanctuaire',
-    leader: 'Pasteur Samuel & Équipe Pastorale',
-    description: 'Nuit de louange, combat spirituel, onction d huile sainte et proclamation.',
-    donationType: 'OFFRANDE',
-    donationTitle: 'Offrande de la Veillée',
-  },
-  {
-    dateKey: '2026-09-12',
-    dayNum: 12,
-    dayName: 'Samedi',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Samedi Paroissial : Répétition & Réunion Bâtisseurs',
-    category: 'SAMEDI',
-    time: '15h00 - 18h00',
-    location: 'Salle Polyvalente & Sanctuaire',
-    leader: 'Pasteur Samuel & Comité des Bâtisseurs',
-    description: '15h00 : Répétition générale chorale et louange.\n16h30 : Réunion stratégique de construction du Grand Sanctuaire.',
-    isSpecial: true,
-    donationType: 'PROJET',
-    donationTitle: 'Soutien Chantier - Samedi',
-  },
-  {
-    dateKey: '2026-09-13',
-    dayNum: 13,
-    dayName: 'Dimanche',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Grand Culte Dominical & Sainte Cène',
-    category: 'CULTE',
-    time: '07h30 (1er culte) & 10h00 (2e culte)',
-    location: 'Grand Sanctuaire',
-    leader: 'Pasteur Samuel',
-    description: 'Célébration solennelle, Sainte Cène, prédication apostolique et collecte solennelle des dîmes.',
-    isSunday: true,
-    donationType: 'DIME',
-    donationTitle: 'Dîme du Culte Dominical',
-  },
-  {
-    dateKey: '2026-09-16',
-    dayNum: 16,
-    dayName: 'Mercredi',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Culte de Guérison & Miracles',
-    category: 'ENSEIGNEMENT',
-    time: '18h30 - 20h30',
-    location: 'Grand Sanctuaire',
-    leader: 'Pasteur Samuel',
-    description: 'Manifestation de la puissance de la résurrection pour les affligés.',
-    donationType: 'OFFRANDE',
-    donationTitle: 'Offrande du Mercredi',
-  },
-  {
-    dateKey: '2026-09-19',
-    dayNum: 19,
-    dayName: 'Samedi',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Samedi Mission & Évangélisation Urbaine',
-    category: 'SAMEDI',
-    time: '14h30 - 18h00',
-    location: 'Esplanade de l Église',
-    leader: 'Département Évangélisation & Jeunesse',
-    description: 'Sortie d impact, distribution de traités et témoignages fraternels.',
-    isSpecial: true,
-    donationType: 'PROJET',
-    donationTitle: 'Fonds Mission & Évangélisation',
-  },
-  {
-    dateKey: '2026-09-20',
-    dayNum: 20,
-    dayName: 'Dimanche',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Culte d Actions de Grâce & Bénédictions',
-    category: 'CULTE',
-    time: '08h30 - 11h30',
-    location: 'Grand Sanctuaire',
-    leader: 'Pasteur Samuel',
-    description: 'Témoignages de victoires, actions de grâce familiales et offrande libre.',
-    isSunday: true,
-    donationType: 'OFFRANDE',
-    donationTitle: 'Offrande d Actions de Grâce',
-  },
-  {
-    dateKey: '2026-09-25',
-    dayNum: 25,
-    dayName: 'Vendredi',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Ouverture : Convention Nationale des Familles 2026',
-    category: 'SEMINAIRE',
-    time: '09h00 - 18h00',
-    location: 'Palais de la Culture, Salle Anoumabo',
-    leader: 'Pasteur Samuel & Invités Internationaux',
-    description: 'Conférence de 3 jours : Ateliers couples, jeunesse et foi victorieuse.',
-    donationType: 'EVENEMENT',
-    donationTitle: 'Convention Nationale des Familles',
-  },
-  {
-    dateKey: '2026-09-26',
-    dayNum: 26,
-    dayName: 'Samedi',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Samedi : Jour 2 Convention Nationale des Familles',
-    category: 'SEMINAIRE',
-    time: '09h00 - 18h00',
-    location: 'Palais de la Culture, Salle Anoumabo',
-    leader: 'Pasteur Samuel',
-    description: 'Deuxième journée de formation et plénières sur la bénédiction générationnelle.',
-    isSpecial: true,
-    donationType: 'EVENEMENT',
-    donationTitle: 'Convention Familles - Samedi',
-  },
-  {
-    dateKey: '2026-09-27',
-    dayNum: 27,
-    dayName: 'Dimanche',
-    monthName: 'Septembre',
-    year: 2026,
-    title: 'Clôture : Grande Célébration de la Convention',
-    category: 'CULTE',
-    time: '09h00 - 13h00',
-    location: 'Palais de la Culture, Salle Anoumabo',
-    leader: 'Pasteur Samuel',
-    description: 'Culte d apothéose réunissant toutes les annexes de l Église Jésus Christ Victoire.',
-    isSunday: true,
-    donationType: 'DIME',
-    donationTitle: 'Dîme & Offrande de Clôture',
-  },
-];
-
 const WEEK_DAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+const MONTHS_FR = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+];
+const DAYS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi'];
+const MONTH_INDEX: Record<string, number> = {
+  janvier: 0, fevrier: 1, février: 1, mars: 2, avril: 3, mai: 4, juin: 5,
+  juillet: 6, aout: 7, août: 7, septembre: 8, octobre: 9, novembre: 10, decembre: 11, décembre: 11,
+};
+
+function toDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function startOfMonth(year: number, month: number) {
+  return new Date(year, month, 1);
+}
+
+function parseToDateKey(raw: string): string | null {
+  const iso = raw.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  const fr = raw.match(/(\d{1,2})\s+([A-Za-zÀ-ÿ]+)\s+(\d{4})/i);
+  if (fr) {
+    const month = MONTH_INDEX[fr[2].toLowerCase()];
+    if (month === undefined) return null;
+    return toDateKey(new Date(Number(fr[3]), month, Number(fr[1])));
+  }
+  return null;
+}
+
+function inferCategory(date: Date, title: string): ChurchEventDay['category'] {
+  const t = title.toLowerCase();
+  if (t.includes('veill')) return 'VEILLEE';
+  if (t.includes('sémin') || t.includes('semin') || t.includes('conférence') || t.includes('conference')) {
+    return 'SEMINAIRE';
+  }
+  if (t.includes('étude') || t.includes('etude') || t.includes('enseignement')) return 'ENSEIGNEMENT';
+  if (t.includes('cellule')) return 'CELLULE';
+  if (date.getDay() === 6) return 'SAMEDI';
+  if (date.getDay() === 0) return 'CULTE';
+  return 'SEMINAIRE';
+}
 
 export default function CalendrierScreen() {
   const insets = useSafeAreaInsets();
@@ -233,48 +91,141 @@ export default function CalendrierScreen() {
     ? Math.max(insets.bottom, 48) + 12
     : Math.max(insets.bottom, 16) + 8;
 
-  // Selected date key (defaults to Samedi 12 Septembre 2026)
-  const [selectedDateKey, setSelectedDateKey] = useState<string>('2026-09-12');
+  const evenements = useFinanceStore((s) => s.evenements);
+  const today = useMemo(() => new Date(), []);
+  const todayKey = toDateKey(today);
+
+  const [visibleYear, setVisibleYear] = useState(today.getFullYear());
+  const [visibleMonth, setVisibleMonth] = useState(today.getMonth());
+  const [selectedDateKey, setSelectedDateKey] = useState<string>(todayKey);
   const [categoryFilter, setCategoryFilter] = useState<string>('TOUS');
 
-  // Days in September 2026 (Sept 1, 2026 was a Tuesday -> index 1 in Lun-Dim)
-  // September has 30 days
+  const goToMonth = (year: number, month: number) => {
+    const d = new Date(year, month, 1);
+    setVisibleYear(d.getFullYear());
+    setVisibleMonth(d.getMonth());
+  };
+
+  const goPrevMonth = () => goToMonth(visibleYear, visibleMonth - 1);
+  const goNextMonth = () => goToMonth(visibleYear, visibleMonth + 1);
+
+  const goToday = () => {
+    setVisibleYear(today.getFullYear());
+    setVisibleMonth(today.getMonth());
+    setSelectedDateKey(todayKey);
+  };
+
+  const churchEvents = useMemo<ChurchEventDay[]>(() => {
+    return evenements.flatMap((ev) => {
+      const dateKey = parseToDateKey(ev.date);
+      if (!dateKey) return [];
+      const [y, m, d] = dateKey.split('-').map(Number);
+      const date = new Date(y, m - 1, d);
+      return [{
+        dateKey,
+        dayNum: d,
+        dayName: DAYS_FR[date.getDay()],
+        monthName: MONTHS_FR[date.getMonth()],
+        year: date.getFullYear(),
+        title: ev.titre,
+        category: inferCategory(date, ev.titre),
+        time: ev.heure,
+        location: ev.lieu,
+        leader: ev.intervenant || 'Pasteur',
+        description: ev.description,
+        isSpecial: inferCategory(date, ev.titre) === 'SEMINAIRE',
+        isSunday: date.getDay() === 0,
+        donationType: 'EVENEMENT' as TypeContribution,
+        donationTitle: ev.titre,
+      }];
+    });
+  }, [evenements]);
+
   const calendarCells = useMemo(() => {
-    // September 2026 starts on Tuesday (offset = 1 empty cell on Monday)
-    const emptyOffset = 1;
-    const daysCount = 30;
-    const cells = [];
+    const first = startOfMonth(visibleYear, visibleMonth);
+    const daysInMonth = new Date(visibleYear, visibleMonth + 1, 0).getDate();
+    const mondayOffset = (first.getDay() + 6) % 7;
+    const cells: Array<{
+      dayNum: number;
+      dateKey: string;
+      event?: ChurchEventDay;
+      isSaturday: boolean;
+      isSunday: boolean;
+      isOutside: boolean;
+      isToday: boolean;
+    }> = [];
 
-    for (let i = 0; i < emptyOffset; i++) {
-      cells.push({ dayNum: null, dateKey: null });
-    }
-
-    for (let day = 1; day <= daysCount; day++) {
-      const dayFormatted = day < 10 ? `0${day}` : `${day}`;
-      const dateKey = `2026-09-${dayFormatted}`;
-      const event = CHURCH_CALENDAR_DATA.find((e) => e.dateKey === dateKey);
+    const prevMonthLast = new Date(visibleYear, visibleMonth, 0).getDate();
+    for (let i = mondayOffset; i > 0; i -= 1) {
+      const day = prevMonthLast - i + 1;
+      const date = new Date(visibleYear, visibleMonth - 1, day);
+      const dateKey = toDateKey(date);
       cells.push({
         dayNum: day,
         dateKey,
-        event,
-        isSaturday: (day + emptyOffset - 1) % 7 === 5,
-        isSunday: (day + emptyOffset - 1) % 7 === 6,
+        event: churchEvents.find((e) => e.dateKey === dateKey),
+        isSaturday: date.getDay() === 6,
+        isSunday: date.getDay() === 0,
+        isOutside: true,
+        isToday: dateKey === todayKey,
       });
     }
 
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      const date = new Date(visibleYear, visibleMonth, day);
+      const dateKey = toDateKey(date);
+      cells.push({
+        dayNum: day,
+        dateKey,
+        event: churchEvents.find((e) => e.dateKey === dateKey),
+        isSaturday: date.getDay() === 6,
+        isSunday: date.getDay() === 0,
+        isOutside: false,
+        isToday: dateKey === todayKey,
+      });
+    }
+
+    const remainder = cells.length % 7;
+    if (remainder !== 0) {
+      for (let day = 1; day <= 7 - remainder; day += 1) {
+        const date = new Date(visibleYear, visibleMonth + 1, day);
+        const dateKey = toDateKey(date);
+        cells.push({
+          dayNum: day,
+          dateKey,
+          event: churchEvents.find((e) => e.dateKey === dateKey),
+          isSaturday: date.getDay() === 6,
+          isSunday: date.getDay() === 0,
+          isOutside: true,
+          isToday: dateKey === todayKey,
+        });
+      }
+    }
+
     return cells;
-  }, []);
+  }, [visibleYear, visibleMonth, churchEvents, todayKey]);
 
   const selectedEvent = useMemo(() => {
-    return CHURCH_CALENDAR_DATA.find((e) => e.dateKey === selectedDateKey);
-  }, [selectedDateKey]);
+    return churchEvents.find((e) => e.dateKey === selectedDateKey);
+  }, [churchEvents, selectedDateKey]);
+
+  const monthPrefix = `${visibleYear}-${String(visibleMonth + 1).padStart(2, '0')}`;
 
   const filteredUpcomingEvents = useMemo(() => {
-    if (categoryFilter === 'TOUS') {
-      return CHURCH_CALENDAR_DATA;
+    return churchEvents.filter((e) => {
+      const inMonth = e.dateKey.startsWith(monthPrefix);
+      const matchCat = categoryFilter === 'TOUS' || e.category === categoryFilter;
+      return inMonth && matchCat;
+    });
+  }, [churchEvents, categoryFilter, monthPrefix]);
+
+  const selectDate = (dateKey: string) => {
+    setSelectedDateKey(dateKey);
+    const [y, m] = dateKey.split('-').map(Number);
+    if (y !== visibleYear || m - 1 !== visibleMonth) {
+      goToMonth(y, m - 1);
     }
-    return CHURCH_CALENDAR_DATA.filter((e) => e.category === categoryFilter);
-  }, [categoryFilter]);
+  };
 
   const handleReminder = (title: string, date: string) => {
     Alert.alert(
@@ -293,8 +244,7 @@ export default function CalendrierScreen() {
   return (
     <View style={styles.container}>
       <Header
-        title="Calendrier des Cultes & Activités"
-        subtitle="Église Jésus Christ Victoire • Septembre 2026"
+        title="Calendrier"
         showBack
         onBack={() => {
           if (router.canGoBack()) router.back();
@@ -310,14 +260,37 @@ export default function CalendrierScreen() {
       >
         {/* Month Title Header */}
         <View style={styles.monthSelectorBar}>
-          <View style={styles.monthTitleBox}>
-            <View style={styles.monthIconCircle}>
-              <Ionicons name="calendar" size={18} color={AppColors.accent} />
+          <View style={styles.monthNavRow}>
+            <TouchableOpacity
+              style={styles.monthNavBtn}
+              onPress={goPrevMonth}
+              activeOpacity={0.8}
+              accessibilityLabel="Mois précédent"
+            >
+              <Ionicons name="chevron-back" size={22} color={AppColors.primary} />
+            </TouchableOpacity>
+
+            <View style={styles.monthTitleBox}>
+              <Text style={styles.monthTitleText}>
+                {MONTHS_FR[visibleMonth]} {visibleYear}
+              </Text>
+              <TouchableOpacity onPress={goToday} activeOpacity={0.8}>
+                <Text style={styles.monthSubtitle}>
+                  {selectedDateKey === todayKey
+                    ? 'Aujourd hui'
+                    : 'Revenir à aujourd hui'}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <View>
-              <Text style={styles.monthTitleText}>Septembre 2026</Text>
-              <Text style={styles.monthSubtitle}>Cultes, samedis & séminaires</Text>
-            </View>
+
+            <TouchableOpacity
+              style={styles.monthNavBtn}
+              onPress={goNextMonth}
+              activeOpacity={0.8}
+              accessibilityLabel="Mois suivant"
+            >
+              <Ionicons name="chevron-forward" size={22} color={AppColors.primary} />
+            </TouchableOpacity>
           </View>
           <View style={styles.legendRow}>
             <View style={styles.legendItem}>
@@ -355,11 +328,7 @@ export default function CalendrierScreen() {
 
             {/* Calendar Grid Cells */}
             <View style={styles.gridContainer}>
-              {calendarCells.map((cell, idx) => {
-                if (!cell.dayNum) {
-                  return <View key={idx} style={styles.emptyCell} />;
-                }
-
+              {calendarCells.map((cell) => {
                 const isSelected = selectedDateKey === cell.dateKey;
                 const hasEvent = !!cell.event;
                 const isSaturday = cell.isSaturday;
@@ -367,14 +336,16 @@ export default function CalendrierScreen() {
 
                 return (
                   <TouchableOpacity
-                    key={idx}
+                    key={cell.dateKey}
                     style={[
                       styles.dayCell,
                       isSaturday && styles.dayCellSaturday,
                       isSunday && styles.dayCellSunday,
+                      cell.isOutside && styles.dayCellOutside,
+                      cell.isToday && !isSelected && styles.dayCellToday,
                       isSelected && styles.dayCellSelected,
                     ]}
-                    onPress={() => cell.dateKey && setSelectedDateKey(cell.dateKey)}
+                    onPress={() => selectDate(cell.dateKey)}
                     activeOpacity={0.7}
                   >
                     <Text
@@ -382,6 +353,7 @@ export default function CalendrierScreen() {
                         styles.dayNumText,
                         isSaturday && styles.saturdayNumText,
                         isSunday && styles.sundayNumText,
+                        cell.isOutside && !isSelected && styles.dayNumTextOutside,
                         isSelected && styles.dayNumTextSelected,
                       ]}
                     >
@@ -515,10 +487,9 @@ export default function CalendrierScreen() {
           <View style={styles.selectedDetailWrapper}>
             <Card style={styles.noEventCard}>
               <Ionicons name="calendar-outline" size={32} color={AppColors.textMuted} />
-              <Text style={styles.noEventTitle}>Journée Libre / Méditation Personnelle</Text>
+              <Text style={styles.noEventTitle}>Aucun rassemblement</Text>
               <Text style={styles.noEventSub}>
-                Aucun rassemblement communautaire programmé ce jour. Vous pouvez tout de même
-                soutenir les œuvres de l Église.
+                Rien n est programmé le {selectedDateKey.split('-').reverse().join('/')}.
               </Text>
               <Button
                 title="Faire un don libre"
@@ -534,8 +505,7 @@ export default function CalendrierScreen() {
         {/* Chronological Agenda Section */}
         <View style={styles.agendaSection}>
           <View style={styles.agendaHeaderRow}>
-            <Text style={styles.agendaSectionTitle}>Programme & Agenda du Mois</Text>
-            <Text style={styles.agendaSectionCount}>{filteredUpcomingEvents.length} cultes</Text>
+            <Text style={styles.agendaSectionTitle}>Agenda</Text>
           </View>
 
           {/* Quick Category Filter Pills */}
@@ -568,15 +538,22 @@ export default function CalendrierScreen() {
             ))}
           </ScrollView>
 
-          {/* Chronological List of All Events */}
           <View style={styles.agendaList}>
-            {filteredUpcomingEvents.map((item, idx) => {
+            {filteredUpcomingEvents.length === 0 ? (
+              <Card style={styles.noEventCard}>
+                <Text style={styles.noEventTitle}>Rien ce mois-ci</Text>
+                <Text style={styles.noEventSub}>
+                  Passez au mois suivant ou précédent avec les flèches en haut.
+                </Text>
+              </Card>
+            ) : null}
+            {filteredUpcomingEvents.map((item) => {
               const isSelected = selectedDateKey === item.dateKey;
               return (
                 <TouchableOpacity
-                  key={idx}
+                  key={`${item.dateKey}-${item.title}`}
                   style={[styles.agendaItemCard, isSelected && styles.agendaItemCardActive]}
-                  onPress={() => setSelectedDateKey(item.dateKey)}
+                  onPress={() => selectDate(item.dateKey)}
                   activeOpacity={0.8}
                 >
                   <View style={styles.agendaDateSquare}>
@@ -623,28 +600,37 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     gap: 12,
   },
-  monthTitleBox: {
+  monthNavRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    justifyContent: 'space-between',
   },
-  monthIconCircle: {
-    width: 40,
-    height: 40,
+  monthNavBtn: {
+    width: 44,
+    height: 44,
     borderRadius: 14,
-    backgroundColor: AppColors.accentLight,
+    backgroundColor: AppColors.white,
+    borderWidth: 1,
+    borderColor: AppColors.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  monthTitleBox: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 8,
   },
   monthTitleText: {
     fontSize: 18,
     fontWeight: '800',
     color: AppColors.textPrimary,
+    textAlign: 'center',
   },
   monthSubtitle: {
     fontSize: 12,
-    color: AppColors.textMuted,
+    color: AppColors.primary,
     marginTop: 2,
+    fontWeight: '600',
   },
   legendRow: {
     flexDirection: 'row',
@@ -724,10 +710,23 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(12, 74, 72, 0.25)',
     backgroundColor: '#F7FBFA',
   },
+  dayCellOutside: {
+    backgroundColor: '#F8FAFC',
+    borderColor: 'transparent',
+    opacity: 0.55,
+  },
+  dayCellToday: {
+    borderColor: AppColors.primary,
+    borderWidth: 1.5,
+  },
   dayCellSelected: {
     backgroundColor: AppColors.primary,
     borderColor: AppColors.primary,
     ...Shadows.small,
+  },
+  dayNumTextOutside: {
+    color: AppColors.textMuted,
+    fontWeight: '500',
   },
   dayNumText: {
     fontSize: 13,

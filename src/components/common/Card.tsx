@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, TouchableOpacity, StyleProp } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { AppColors, Shadows } from '@/constants/colors';
 
 interface CardProps {
@@ -8,6 +8,7 @@ interface CardProps {
   onPress?: () => void;
   variant?: 'default' | 'elevated' | 'outlined' | 'flat' | 'primary';
   noPadding?: boolean;
+  enterIndex?: number;
 }
 
 export const Card: React.FC<CardProps> = ({
@@ -17,50 +18,31 @@ export const Card: React.FC<CardProps> = ({
   variant = 'default',
   noPadding = false,
 }) => {
-  const getCardStyle = () => {
-    const list: ViewStyle[] = [styles.base];
-
-    if (!noPadding) list.push(styles.padding);
-
-    switch (variant) {
-      case 'elevated':
-        list.push(styles.elevated);
-        break;
-      case 'outlined':
-        list.push(styles.outlined);
-        break;
-      case 'flat':
-        list.push(styles.flat);
-        break;
-      case 'primary':
-        list.push(styles.primary);
-        break;
-      default:
-        list.push(styles.default);
-    }
-
-    return list;
-  };
+  const cardStyle = [
+    styles.base,
+    !noPadding && styles.padding,
+    variant === 'elevated' && styles.elevated,
+    variant === 'outlined' && styles.outlined,
+    variant === 'flat' && styles.flat,
+    variant === 'primary' && styles.primary,
+    variant === 'default' && styles.default,
+    style,
+  ];
 
   if (onPress) {
     return (
-      <TouchableOpacity
-        style={[getCardStyle(), style]}
-        onPress={onPress}
-        activeOpacity={0.8}
-      >
+      <Pressable style={cardStyle} onPress={onPress}>
         {children}
-      </TouchableOpacity>
+      </Pressable>
     );
   }
 
-  return <View style={[getCardStyle(), style]}>{children}</View>;
+  return <View style={cardStyle}>{children}</View>;
 };
 
 const styles = StyleSheet.create({
   base: {
     borderRadius: 20,
-    overflow: 'hidden',
   },
   padding: {
     padding: 16,

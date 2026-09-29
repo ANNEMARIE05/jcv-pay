@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -13,12 +13,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppColors } from '@/constants/colors';
 import { Card } from '@/components/common/Card';
-import { Button } from '@/components/common/Button';
-import { Badge } from '@/components/common/Badge';
-import { ProgressBar } from '@/components/common/ProgressBar';
+import { FadeInView } from '@/components/motion/FadeIn';
+import { HomeSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
 import { useNotificationStore } from '@/store/notificationStore';
+import { isStaff } from '@/constants/roles';
+import { AdminDashboard } from '@/app/admin-panel';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -28,22 +30,35 @@ export default function HomeScreen() {
 
   const user = useAuthStore((s) => s.user);
   const switchRole = useAuthStore((s) => s.switchRole);
-  const isAdmin = user?.role === 'ADMINISTRATEUR' || user?.role === 'TRESORIER';
+  const isAdmin = isStaff(user?.role);
 
-  const resume = useFinanceStore((s) => s.resume);
-  const transactions = useFinanceStore((s) => s.transactions);
-  const projets = useFinanceStore((s) => s.projets);
-  const tresorerie = useFinanceStore((s) => s.tresorerieGlobale);
-  const getPayersSummary = useFinanceStore((s) => s.getPayersSummary);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const pendingCount = useFinanceStore(
+    (s) => s.transactions.filter((t) => t.statut === 'EN_ATTENTE').length
+  );
+  const resume = useFinanceStore((s) => s.resume);
+  const recus = useFinanceStore((s) => s.recus);
+  const projets = useFinanceStore((s) => s.projets);
+  const evenements = useFinanceStore((s) => s.evenements);
 
-  const [activeCategory, setActiveCategory] = useState<'DIME' | 'COTISATION' | 'PROJET'>('DIME');
-  const [selectedAmount, setSelectedAmount] = useState<number>(25000);
+  const ready = useScreenReady(720);
+  const recusCount = recus.length;
+  const projetsActifs = projets.filter((p) => p.statut === 'EN_COURS').slice(0, 2);
+  const prochainsEvenements = evenements.slice(0, 2);
 
-  const quickAmounts = [5000, 10000, 25000, 50000];
-  const featuredProject = projets[0];
-  const payersCount = isAdmin ? getPayersSummary().length : 0;
-  const validatedCount = transactions.filter((t) => t.statut === 'VALIDE').length;
+  if (isAdmin) {
+    return <AdminDashboard embedded />;
+  }
+
+  if (!ready) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor={AppColors.primary} translucent={Platform.OS === 'android'} />
+        <View style={{ height: topInset + 8, backgroundColor: AppColors.primary }} />
+        <HomeSkeleton />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -67,7 +82,7 @@ export default function HomeScreen() {
             <View>
               <Text style={styles.greetingText}>Bonjour,</Text>
               <Text style={styles.userNameText} numberOfLines={1}>
-                {user ? `${user.prenom} ${user.nom}` : 'Membre de l Église'}
+                {user ? `${user.prenom} ${user.nom}`.trim() : 'Membre de l Église'}
               </Text>
             </View>
           </TouchableOpacity>
@@ -115,331 +130,108 @@ export default function HomeScreen() {
         <View style={styles.heroSection}>
           <View style={styles.heroTextContainer}>
             <Text style={styles.heroTitle}>
-              {isAdmin ? 'Caisse & suivi global' : 'Gérez vos finances & contributions'}
-            </Text>
-            <Text style={styles.heroSubtitle}>
-              {isAdmin
-                ? 'Solde, entrées, retraits et historiques — tout en un coup d œil'
-                : 'Participez et suivez vos versements en toute transparence'}
+              Mon espace
             </Text>
           </View>
         </View>
 
-        {isAdmin && (
-          <View style={styles.adminBannerContainer}>
-            <Card style={styles.adminOverviewCard} variant="elevated">
-              <Text style={styles.adminOverviewLabel}>Solde caisse maintenant</Text>
-              <Text style={styles.adminOverviewAmount}>
-                {tresorerie.soldeTotal.toLocaleString('fr-FR')} FCFA
-              </Text>
-              <View style={styles.adminStatsRow}>
-                <View style={styles.adminStatItem}>
-                  <Text style={styles.adminStatLabel}>Rentré</Text>
-                  <Text style={styles.adminStatIn}>
-                    +{tresorerie.entreesMois.toLocaleString('fr-FR')}
-                  </Text>
-                </View>
-                <View style={styles.adminStatItem}>
-                  <Text style={styles.adminStatLabel}>Retiré</Text>
-                  <Text style={styles.adminStatOut}>
-                    -{tresorerie.sortiesMois.toLocaleString('fr-FR')}
-                  </Text>
-                </View>
-                <View style={styles.adminStatItem}>
-                  <Text style={styles.adminStatLabel}>Payeurs</Text>
-                  <Text style={styles.adminStatNeutral}>{payersCount}</Text>
-                </View>
-                <View style={styles.adminStatItem}>
-                  <Text style={styles.adminStatLabel}>Validés</Text>
-                  <Text style={styles.adminStatNeutral}>{validatedCount}</Text>
-                </View>
+        <FadeInView style={styles.homeSheet}>
+          <Card style={styles.summaryCard} variant="elevated">
+            <Text style={styles.summaryTitle}>Mon suivi</Text>
+            <View style={styles.summaryRow}>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>
+                  {resume.totalContribue.toLocaleString('fr-FR')}
+                </Text>
+                <Text style={styles.summaryLabel}>FCFA versés</Text>
               </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{recusCount}</Text>
+                <Text style={styles.summaryLabel}>Reçus</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{pendingCount}</Text>
+                <Text style={styles.summaryLabel}>En attente</Text>
+              </View>
+            </View>
+          </Card>
+
+          <Text style={styles.blockTitle}>Accès rapide</Text>
+          <View style={styles.shortcutGrid}>
+            {[
+              {
+                id: 'contrib',
+                label: 'Nouvelle contribution',
+                icon: 'heart-outline' as const,
+                route: '/contribution/nouvelle',
+              },
+            ].map((item) => (
               <TouchableOpacity
-                style={styles.adminBanner}
-                onPress={() => router.push('/tresorerie')}
+                key={item.id}
+                style={styles.shortcutBtn}
+                onPress={() => router.push(item.route as any)}
                 activeOpacity={0.85}
               >
-                <View style={styles.adminBannerIcon}>
-                  <Ionicons name="wallet" size={20} color={AppColors.white} />
+                <View style={styles.shortcutIcon}>
+                  <Ionicons name={item.icon} size={22} color={AppColors.primary} />
                 </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <Text style={styles.adminBannerTitle}>Ouvrir la trésorerie</Text>
-                  <Text style={styles.adminBannerSub}>
-                    Caisses, qui a payé, retraits & validations →
-                  </Text>
-                </View>
+                <Text style={styles.shortcutLabel}>{item.label}</Text>
               </TouchableOpacity>
-
-              <View style={styles.adminQuickLinks}>
-                <TouchableOpacity
-                  style={styles.adminQuickLink}
-                  onPress={() => router.push('/admin-panel')}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="shield-checkmark" size={18} color={AppColors.primary} />
-                  <Text style={styles.adminQuickLinkText}>Administration</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.adminQuickLink}
-                  onPress={() => router.push('/tresorerie')}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="layers-outline" size={18} color={AppColors.primary} />
-                  <Text style={styles.adminQuickLinkText}>Caisses</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.adminQuickLink}
-                  onPress={() => {
-                    switchRole();
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Ionicons name="swap-horizontal" size={18} color={AppColors.accent} />
-                  <Text style={styles.adminQuickLinkText}>Vue membre</Text>
-                </TouchableOpacity>
-              </View>
-            </Card>
-          </View>
-        )}
-
-        {/* Floating Financial Action Card (Signature Card from Screen 6) */}
-        <View style={[styles.cardContainer, isAdmin && styles.cardContainerAdmin]}>
-          <Card style={styles.mainCard} variant="elevated">
-            {/* Category Filter Pills inside Card */}
-            <View style={styles.pillsRow}>
-              {(
-                [
-                  { id: 'DIME', label: 'Dîmes & Dons' },
-                  { id: 'COTISATION', label: 'Cotisations' },
-                  { id: 'PROJET', label: 'Projets' },
-                ] as const
-              ).map((tab) => {
-                const isActive = activeCategory === tab.id;
-                return (
-                  <TouchableOpacity
-                    key={tab.id}
-                    style={[styles.pill, isActive && styles.pillActive]}
-                    onPress={() => setActiveCategory(tab.id)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.pillText, isActive && styles.pillTextActive]}>
-                      {tab.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Total Balance & Stats Row */}
-            <View style={styles.balanceSection}>
-              <View>
-                <Text style={styles.balanceLabel}>Total contribué (2026)</Text>
-                <Text style={styles.balanceAmount}>
-                  {resume.totalContribue.toLocaleString('fr-FR')} <Text style={styles.currency}>FCFA</Text>
-                </Text>
-              </View>
-
-              <View style={styles.dueRow}>
-                <View style={styles.dueBox}>
-                  <Text style={styles.dueLabel}>Reste dû</Text>
-                  <Text style={styles.dueAmount}>
-                    {resume.resteAPayer.toLocaleString('fr-FR')} F
-                  </Text>
-                </View>
-                <View style={styles.pendingBox}>
-                  <Text style={styles.pendingLabel}>En attente</Text>
-                  <Text style={styles.pendingAmount}>
-                    {resume.enAttente.toLocaleString('fr-FR')} F
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Quick Amount Selector */}
-            <View style={styles.quickAmountContainer}>
-              <Text style={styles.sectionMiniLabel}>Montant rapide</Text>
-              <View style={styles.amountsRow}>
-                {quickAmounts.map((amt) => {
-                  const isSelected = selectedAmount === amt;
-                  return (
-                    <TouchableOpacity
-                      key={amt}
-                      style={[styles.amtBtn, isSelected && styles.amtBtnSelected]}
-                      onPress={() => setSelectedAmount(amt)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.amtText, isSelected && styles.amtTextSelected]}>
-                        {(amt / 1000).toString()}k F
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Primary Action Button */}
-            <Button
-              title={`Contribuer (${selectedAmount.toLocaleString('fr-FR')} FCFA)`}
-              onPress={() => {
-                router.push({
-                  pathname: '/contribution/nouvelle',
-                  params: {
-                    type: activeCategory,
-                    preselectedAmount: selectedAmount.toString(),
-                  },
-                });
-              }}
-              size="lg"
-              variant="primary"
-              style={styles.contribBtn}
-            />
-          </Card>
-        </View>
-
-        {/* Featured Project Section (Screen 6 "Hot News" / Featured banner) */}
-        {featuredProject && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={styles.sectionTitle}>Projet en cours</Text>
-                <Text style={styles.sectionSubtitle}>Campagne de collecte prioritaire</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => router.push('/(tabs)/projets')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.seeAllText}>Voir tout →</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Card
-              style={styles.projectCard}
-              onPress={() => router.push(`/projet/${featuredProject.id}`)}
-            >
-              <View style={styles.projectCardHeader}>
-                <View style={styles.projectIconBadge}>
-                  <Ionicons name="business-outline" size={24} color={AppColors.primary} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.projectTitle} numberOfLines={1}>
-                    {featuredProject.titre}
-                  </Text>
-                  <Text style={styles.projectOrganizer}>
-                    {featuredProject.organisateur}
-                  </Text>
-                </View>
-                <Badge label="En cours" variant="accent" size="sm" />
-              </View>
-
-              <View style={styles.projectProgressSection}>
-                <View style={styles.progressLabelRow}>
-                  <Text style={styles.progressAmountText}>
-                    {featuredProject.montantCollecte.toLocaleString('fr-FR')} FCFA
-                  </Text>
-                  <Text style={styles.progressPercentText}>
-                    {Math.round(
-                      (featuredProject.montantCollecte / featuredProject.objectif) * 100
-                    )}
-                    %
-                  </Text>
-                </View>
-                <ProgressBar
-                  progress={featuredProject.montantCollecte / featuredProject.objectif}
-                  height={8}
-                  color={AppColors.accent}
-                />
-                <Text style={styles.projectGoalText}>
-                  Objectif : {featuredProject.objectif.toLocaleString('fr-FR')} FCFA •{' '}
-                  {featuredProject.participantsCount} donateurs
-                </Text>
-              </View>
-            </Card>
-          </View>
-        )}
-
-        {/* Recent Transactions Section */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>
-                {isAdmin ? 'Derniers paiements (tous)' : 'Dernières transactions'}
-              </Text>
-              <Text style={styles.sectionSubtitle}>
-                {isAdmin
-                  ? 'Qui a payé, quand, et pour quel motif'
-                  : 'Historique de vos contributions'}
-              </Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => router.push('/historique')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.seeAllText}>Voir tout l historique →</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.transactionsList}>
-            {transactions.slice(0, 4).map((tx) => (
-              <Card
-                key={tx.id}
-                style={styles.txCard}
-                onPress={() => router.push(`/recu/${tx.id}`)}
-              >
-                <View style={styles.txRow}>
-                  <View style={styles.txIconContainer}>
-                    <Ionicons
-                      name={
-                        tx.type === 'DIME'
-                          ? 'cash-outline'
-                          : tx.type === 'PROJET'
-                          ? 'hammer-outline'
-                          : tx.type === 'EVENEMENT'
-                          ? 'calendar-outline'
-                          : 'gift-outline'
-                      }
-                      size={20}
-                      color={AppColors.primary}
-                    />
-                  </View>
-
-                  <View style={styles.txDetails}>
-                    <Text style={styles.txTitle} numberOfLines={1}>
-                      {tx.titre}
-                    </Text>
-                    <Text style={styles.txDate}>
-                      {isAdmin ? `${tx.donateurNom} • ` : ''}
-                      {tx.date} • {tx.heure}
-                    </Text>
-                  </View>
-
-                  <View style={styles.txRight}>
-                    <Text style={styles.txAmount}>
-                      {tx.montant.toLocaleString('fr-FR')} F
-                    </Text>
-                    <Badge
-                      label={tx.statut === 'VALIDE' ? 'Validé' : 'En attente'}
-                      variant={tx.statut === 'VALIDE' ? 'success' : 'warning'}
-                      size="sm"
-                    />
-                  </View>
-                </View>
-              </Card>
             ))}
-
-            {/* Direct button to full history */}
-            <TouchableOpacity
-              style={styles.fullHistoryBtn}
-              onPress={() => router.push('/historique')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="receipt-outline" size={18} color={AppColors.primary} />
-              <Text style={styles.fullHistoryBtnText}>
-                Consulter tout l historique ({transactions.length} quittances)
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={AppColors.primary} />
-            </TouchableOpacity>
           </View>
-        </View>
+
+          <Text style={styles.blockTitle}>Projets en cours</Text>
+          {projetsActifs.length === 0 ? (
+            <Card style={styles.emptyBlock}>
+              <Text style={styles.emptyBlockText}>Aucun projet ouvert pour le moment.</Text>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/projets')}>
+                <Text style={styles.emptyLink}>Voir les projets</Text>
+              </TouchableOpacity>
+            </Card>
+          ) : (
+            projetsActifs.map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                onPress={() => router.push(`/projet/${p.id}`)}
+                activeOpacity={0.85}
+              >
+                <Card style={styles.listCard} variant="elevated">
+                  <Text style={styles.listCardTitle}>{p.titre}</Text>
+                  <Text style={styles.listCardMeta}>
+                    {p.montantCollecte.toLocaleString('fr-FR')} / {p.objectif.toLocaleString('fr-FR')} FCFA
+                  </Text>
+                </Card>
+              </TouchableOpacity>
+            ))
+          )}
+
+          <Text style={styles.blockTitle}>Événements</Text>
+          {prochainsEvenements.length === 0 ? (
+            <Card style={styles.emptyBlock}>
+              <Text style={styles.emptyBlockText}>Aucun événement programmé.</Text>
+              <TouchableOpacity onPress={() => router.push('/calendrier')}>
+                <Text style={styles.emptyLink}>Ouvrir le calendrier</Text>
+              </TouchableOpacity>
+            </Card>
+          ) : (
+            prochainsEvenements.map((ev) => (
+              <TouchableOpacity
+                key={ev.id}
+                onPress={() => router.push(`/evenement/${ev.id}`)}
+                activeOpacity={0.85}
+              >
+                <Card style={styles.listCard} variant="elevated">
+                  <Text style={styles.listCardTitle}>{ev.titre}</Text>
+                  <Text style={styles.listCardMeta}>
+                    {ev.date} • {ev.lieu}
+                  </Text>
+                </Card>
+              </TouchableOpacity>
+            ))
+          )}
+        </FadeInView>
       </ScrollView>
     </View>
   );
@@ -595,6 +387,133 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: AppColors.white,
   },
+  adminIntro: {
+    fontSize: 13,
+    color: AppColors.textSecondary,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  treasuryLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 8,
+  },
+  treasuryLinkText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: AppColors.primary,
+  },
+  homeSheet: {
+    paddingHorizontal: 20,
+    marginTop: -28,
+    paddingBottom: 8,
+  },
+  homeSheetAdmin: {
+    marginTop: 8,
+  },
+  summaryCard: {
+    padding: 18,
+    borderRadius: 22,
+    marginBottom: 18,
+  },
+  summaryTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: AppColors.textPrimary,
+    marginBottom: 14,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: AppColors.primary,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: AppColors.textSecondary,
+    marginTop: 4,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 36,
+    backgroundColor: AppColors.borderLight,
+  },
+  blockTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: AppColors.textPrimary,
+    marginBottom: 10,
+    marginTop: 6,
+  },
+  shortcutGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 16,
+  },
+  shortcutBtn: {
+    width: '48%',
+    flexGrow: 1,
+    backgroundColor: AppColors.white,
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: AppColors.borderLight,
+  },
+  shortcutIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: AppColors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  shortcutLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppColors.textPrimary,
+  },
+  emptyBlock: {
+    padding: 16,
+    marginBottom: 12,
+    alignItems: 'flex-start',
+  },
+  emptyBlockText: {
+    fontSize: 13,
+    color: AppColors.textSecondary,
+  },
+  emptyLink: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppColors.primary,
+    marginTop: 8,
+  },
+  listCard: {
+    padding: 14,
+    marginBottom: 10,
+  },
+  listCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: AppColors.textPrimary,
+  },
+  listCardMeta: {
+    fontSize: 12,
+    color: AppColors.textSecondary,
+    marginTop: 4,
+  },
   adminBannerSub: {
     fontSize: 11,
     color: 'rgba(255, 255, 255, 0.9)',
@@ -656,6 +575,12 @@ const styles = StyleSheet.create({
     color: AppColors.white,
     letterSpacing: -0.3,
   },
+  heroHint: {
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 6,
+    lineHeight: 18,
+  },
   heroSubtitle: {
     fontSize: 13,
     color: 'rgba(255, 255, 255, 0.8)',
@@ -664,6 +589,18 @@ const styles = StyleSheet.create({
   cardContainer: {
     paddingHorizontal: 20,
     marginTop: -28,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: AppColors.textPrimary,
+    marginBottom: 6,
+  },
+  cardHint: {
+    fontSize: 12,
+    color: AppColors.textSecondary,
+    lineHeight: 17,
+    marginBottom: 14,
   },
   cardContainerAdmin: {
     marginTop: 0,
@@ -799,16 +736,27 @@ const styles = StyleSheet.create({
     marginTop: 24,
     paddingHorizontal: 20,
   },
+  activityOverlap: {
+    marginTop: -28,
+  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 14,
   },
+  sectionHeaderCol: {
+    marginBottom: 14,
+  },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '700',
     color: AppColors.textPrimary,
+  },
+  sectionHint: {
+    fontSize: 12,
+    color: AppColors.textSecondary,
+    marginTop: 2,
   },
   sectionSubtitle: {
     fontSize: 12,
@@ -912,6 +860,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: AppColors.primary,
+  },
+  emptyHint: {
+    fontSize: 13,
+    color: AppColors.textMuted,
+    textAlign: 'center',
   },
   fullHistoryBtn: {
     flexDirection: 'row',

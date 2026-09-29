@@ -14,7 +14,13 @@ import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { TabsSelector } from '@/components/common/TabsSelector';
+import { PaginationBar } from '@/components/common/PaginationBar';
+import { FilterChips } from '@/components/common/FilterChips';
+import { usePagedList } from '@/hooks/usePagedList';
 import { useFinanceStore } from '@/store/financeStore';
+import { ListSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
+import { scrollInputIntoView } from '@/utils/scrollInputIntoView';
 
 const CATEGORIES = [
   { id: 'TOUS', label: 'Tous' },
@@ -25,104 +31,57 @@ const CATEGORIES = [
   { id: 'EPARGNE', label: 'Épargne' },
 ];
 
-const CALENDAR_DAYS = [
-  {
-    day: '07',
-    name: 'Lun',
-    date: '7 Sep 2026',
-    title: 'Communion des Cellules de Maison',
-    time: '18h30 - 20h00',
-    leader: 'Responsables de Quartier',
-    desc: 'Prière fraternelle et méditation dans les familles.',
-    badge: 'Cellules de maison',
-    donationType: 'LIBRE',
-    donationTitle: 'Offrande de Cellule',
-  },
-  {
-    day: '08',
-    name: 'Mar',
-    date: '8 Sep 2026',
-    title: 'Intercession & Prière de Midi',
-    time: '12h00 - 13h30',
-    leader: 'Département Intercession',
-    desc: 'Prière pour la nation, les familles et les malades.',
-    badge: 'Prière de midi',
-    donationType: 'OFFRANDE',
-    donationTitle: 'Offrande d Intercession',
-  },
-  {
-    day: '09',
-    name: 'Mer',
-    date: '9 Sep 2026',
-    title: 'Culte d Enseignement & Étude Biblique',
-    time: '18h30 - 20h30',
-    leader: 'Pasteur Samuel',
-    desc: 'Thème : Les lois de la bénédiction financière et de la semence.',
-    badge: 'Étude Biblique',
-    donationType: 'DIME',
-    donationTitle: 'Dîme & Offrande du Mercredi',
-  },
-  {
-    day: '10',
-    name: 'Jeu',
-    date: '10 Sep 2026',
-    title: 'Permanence Pastorale & Écoute',
-    time: '09h00 - 15h00',
-    leader: 'Pasteur Samuel & Secrétariat',
-    desc: 'Conseils spirituels, entretiens de mariage et délivrance.',
-    badge: 'Pastoral',
-    donationType: 'COTISATION',
-    donationTitle: 'Soutien Pastoral',
-  },
-  {
-    day: '11',
-    name: 'Ven',
-    date: '11 Sep 2026',
-    title: 'Grande Veillée de Percée & Onction',
-    time: '21h00 - 02h00',
-    leader: 'Pasteur Samuel & Équipe Prophétique',
-    desc: 'Nuit de louange intense, combat spirituel et visitation divine.',
-    badge: 'Veillée de Prière',
-    donationType: 'OFFRANDE',
-    donationTitle: 'Offrande de la Veillée',
-  },
-  {
-    day: '12',
-    name: 'Sam',
-    date: '12 Sep 2026',
-    title: 'Samedi : Répétition & Rencontre des Bâtisseurs',
-    time: '15h00 - 18h00',
-    leader: 'Pasteur Samuel & Comité Bâtisseurs',
-    desc: 'Répétition de la chorale puis réunion stratégique du comité de construction du Grand Sanctuaire.',
-    badge: 'Samedi - Activités & Chœur',
-    isSpecial: true,
-    donationType: 'PROJET',
-    donationTitle: 'Soutien Construction - Samedi',
-  },
-  {
-    day: '13',
-    name: 'Dim',
-    date: '13 Sep 2026',
-    title: 'Grand Culte Dominical & Sainte Cène',
-    time: '07h30 (1er culte) & 10h00 (2e culte)',
-    leader: 'Pasteur Samuel',
-    desc: 'Célébration festive, Sainte Cène, proclamation de victoires et collecte des dîmes et offrandes.',
-    badge: 'Culte Dominical',
-    isSunday: true,
-    donationType: 'DIME',
-    donationTitle: 'Dîme du Culte Dominical',
-  },
-];
+const WEEK_SHORT = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+function toDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function mondayOf(d: Date) {
+  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = copy.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  copy.setDate(copy.getDate() + diff);
+  return copy;
+}
 
 export default function ContributionsScreen() {
   const transactions = useFinanceStore((s) => s.transactions);
   const cotisationsStatutaires = useFinanceStore((s) => s.cotisations);
 
   const [activeCategory, setActiveCategory] = useState('TOUS');
-  const [selectedDay, setSelectedDay] = useState('12'); // Defaults to Samedi so Saturday is in spotlight
+  const [cotisStatut, setCotisStatut] = useState<'TOUS' | 'A_PAYER' | 'PARTIEL' | 'PAYE'>('TOUS');
+  const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
+  const [selectedDay, setSelectedDay] = useState(() => toDateKey(new Date()));
   const [searchQuery, setSearchQuery] = useState('');
+  const ready = useScreenReady(600);
 
-  const activeDayInfo = CALENDAR_DAYS.find((d) => d.day === selectedDay) || CALENDAR_DAYS[5];
+  const todayKey = toDateKey(new Date());
+  const weekDays = useMemo(() => {
+    return WEEK_SHORT.map((name, i) => {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      return {
+        key: toDateKey(d),
+        day: String(d.getDate()),
+        name,
+        isSunday: d.getDay() === 0,
+        isToday: toDateKey(d) === todayKey,
+      };
+    });
+  }, [weekStart, todayKey]);
+
+  const shiftWeek = (dir: -1 | 1) => {
+    const next = new Date(weekStart);
+    next.setDate(weekStart.getDate() + dir * 7);
+    setWeekStart(next);
+    const keep = new Date(next);
+    keep.setDate(next.getDate() + 3);
+    setSelectedDay(toDateKey(keep));
+  };
 
   const filteredCotisations = useMemo(() => {
     return cotisationsStatutaires.filter((c) => {
@@ -130,16 +89,19 @@ export default function ContributionsScreen() {
       const matchSearch =
         c.titre.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.categorie.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCat && matchSearch;
+      const matchStatut = cotisStatut === 'TOUS' || c.statut === cotisStatut;
+      return matchCat && matchSearch && matchStatut;
     });
-  }, [activeCategory, searchQuery]);
+  }, [activeCategory, searchQuery, cotisStatut, cotisationsStatutaires]);
+
+  const cotisPage = usePagedList(filteredCotisations, 6, `${activeCategory}|${searchQuery}|${cotisStatut}`);
+  const txPage = usePagedList(transactions, 6, 'tx');
 
   return (
     <View style={styles.container}>
       {/* Deep Teal Curved Header (Screen 7) */}
       <Header
-        title="Contributions & Cotisations"
-        subtitle="Search & Pay Contributions"
+        title="Cotisations"
         showBack
         onBack={() => router.replace('/(tabs)')}
         variant="curved"
@@ -154,10 +116,15 @@ export default function ContributionsScreen() {
         }
       />
 
+      {!ready ? (
+        <ListSkeleton count={5} />
+      ) : (
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
         {/* Search Bar Container */}
         <View style={styles.searchContainer}>
@@ -169,6 +136,7 @@ export default function ContributionsScreen() {
               placeholderTextColor={AppColors.textMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
+              onFocus={scrollInputIntoView}
             />
             {searchQuery ? (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -183,16 +151,23 @@ export default function ContributionsScreen() {
           <View style={styles.calendarSectionHeader}>
             <View>
               <Text style={styles.calendarSectionTitle}>Cette semaine</Text>
-              <Text style={styles.calendarSectionSub}>Choisissez un jour pour voir l activité</Text>
             </View>
-            <TouchableOpacity
-              style={styles.fullCalendarBtn}
-              onPress={() => router.push('/calendrier')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="calendar-outline" size={16} color={AppColors.primary} />
-              <Text style={styles.fullCalendarBtnText}>Mois</Text>
-            </TouchableOpacity>
+            <View style={styles.weekNav}>
+              <TouchableOpacity style={styles.weekNavBtn} onPress={() => shiftWeek(-1)} activeOpacity={0.8}>
+                <Ionicons name="chevron-back" size={16} color={AppColors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.fullCalendarBtn}
+                onPress={() => router.push('/calendrier')}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="calendar-outline" size={16} color={AppColors.primary} />
+                <Text style={styles.fullCalendarBtnText}>Mois</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.weekNavBtn} onPress={() => shiftWeek(1)} activeOpacity={0.8}>
+                <Ionicons name="chevron-forward" size={16} color={AppColors.primary} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           <ScrollView
@@ -200,24 +175,23 @@ export default function ContributionsScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.calendarScroll}
           >
-            {CALENDAR_DAYS.map((d) => {
-              const isSelected = selectedDay === d.day;
+            {weekDays.map((d) => {
+              const isSelected = selectedDay === d.key;
               return (
                 <TouchableOpacity
-                  key={d.day}
+                  key={d.key}
                   style={[
                     styles.dayCard,
                     isSelected && styles.dayCardActive,
-                    d.isSpecial && !isSelected && styles.dayCardSpecial,
+                    d.isToday && !isSelected && styles.dayCardToday,
                   ]}
-                  onPress={() => setSelectedDay(d.day)}
+                  onPress={() => setSelectedDay(d.key)}
                   activeOpacity={0.8}
                 >
                   <Text
                     style={[
                       styles.dayName,
                       isSelected && styles.dayNameActive,
-                      d.isSpecial && !isSelected && styles.dayNameSpecial,
                     ]}
                   >
                     {d.name}
@@ -226,7 +200,6 @@ export default function ContributionsScreen() {
                     style={[
                       styles.dayText,
                       isSelected && styles.dayTextActive,
-                      d.isSpecial && !isSelected && styles.dayTextSpecial,
                     ]}
                   >
                     {d.day}
@@ -237,71 +210,6 @@ export default function ContributionsScreen() {
           </ScrollView>
         </View>
 
-        {/* Selected Day Agenda Banner */}
-        {activeDayInfo && (
-          <View style={styles.agendaDayContainer}>
-            <Card style={styles.agendaCard} variant="elevated">
-              <View style={styles.agendaHeader}>
-                <View
-                  style={[
-                    styles.agendaBadge,
-                    activeDayInfo.isSpecial ? styles.agendaBadgeSpecial : null,
-                  ]}
-                >
-                  <Ionicons
-                    name={activeDayInfo.isSunday ? 'sunny' : activeDayInfo.isSpecial ? 'calendar' : 'time-outline'}
-                    size={14}
-                    color={activeDayInfo.isSpecial ? AppColors.accentDark : AppColors.primary}
-                  />
-                  <Text
-                    style={[
-                      styles.agendaBadgeText,
-                      activeDayInfo.isSpecial ? styles.agendaBadgeTextSpecial : null,
-                    ]}
-                  >
-                    {activeDayInfo.badge} • {activeDayInfo.date}
-                  </Text>
-                </View>
-
-                <Badge
-                  label={activeDayInfo.time}
-                  variant={activeDayInfo.isSunday ? 'primary' : 'neutral'}
-                  size="sm"
-                />
-              </View>
-
-              <Text style={styles.agendaTitle}>{activeDayInfo.title}</Text>
-              <Text style={styles.agendaDesc}>{activeDayInfo.desc}</Text>
-
-              <View style={styles.agendaLeaderRow}>
-                <Ionicons name="person-outline" size={14} color={AppColors.accent} />
-                <Text style={styles.agendaLeaderText}>
-                  Responsable : <Text style={styles.agendaLeaderBold}>{activeDayInfo.leader}</Text>
-                </Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.agendaActionBtn}
-                onPress={() =>
-                  router.push({
-                    pathname: '/contribution/nouvelle',
-                    params: {
-                      type: activeDayInfo.donationType as any,
-                      titre: activeDayInfo.donationTitle,
-                    },
-                  })
-                }
-                activeOpacity={0.8}
-              >
-                <Ionicons name="wallet-outline" size={16} color={AppColors.white} />
-                <Text style={styles.agendaActionBtnText}>
-                  Faire l offrande de ce culte ({activeDayInfo.donationTitle}) →
-                </Text>
-              </TouchableOpacity>
-            </Card>
-          </View>
-        )}
-
         {/* Categories Pills */}
         <View style={styles.categoriesSection}>
           <TabsSelector
@@ -310,20 +218,33 @@ export default function ContributionsScreen() {
             onChangeTab={setActiveCategory}
             scrollable
           />
+          <View style={{ marginTop: 10 }}>
+            <FilterChips
+              value={cotisStatut}
+              onChange={setCotisStatut}
+              options={[
+                { id: 'TOUS', label: 'Tous' },
+                { id: 'A_PAYER', label: 'À payer' },
+                { id: 'PARTIEL', label: 'Partiel' },
+                { id: 'PAYE', label: 'Payé' },
+              ]}
+            />
+          </View>
         </View>
 
         {/* Results Section */}
         <View style={styles.resultsSection}>
           <View style={styles.resultsHeader}>
-            <Text style={styles.resultsTitle}>
-              Engagements trouvés ({filteredCotisations.length})
-            </Text>
-            <Text style={styles.resultsSub}>Septembre 2026</Text>
+            <Text style={styles.resultsTitle}>Engagements</Text>
           </View>
 
-          {/* List of Cotisation Cards (Styled like Screen 7 ticket search cards) */}
           <View style={styles.cardsList}>
-            {filteredCotisations.map((item) => {
+            {filteredCotisations.length === 0 ? (
+              <Card style={styles.cotisationCard}>
+                <Text style={styles.agendaDesc}>Aucun engagement pour le moment.</Text>
+              </Card>
+            ) : (
+            cotisPage.pageItems.map((item) => {
               const isPaid = item.statut === 'PAYE';
               const isPartial = item.statut === 'PARTIEL';
 
@@ -417,14 +338,24 @@ export default function ContributionsScreen() {
                   </View>
                 </Card>
               );
-            })}
+            })
+            )}
+            <PaginationBar
+              page={cotisPage.page}
+              totalPages={cotisPage.totalPages}
+              total={cotisPage.total}
+              from={cotisPage.from}
+              to={cotisPage.to}
+              onPageChange={cotisPage.setPage}
+              label="engagements"
+            />
           </View>
         </View>
 
-        {/* Section: Historique récent des paiements de cotisations */}
+        {transactions.length > 0 ? (
         <View style={styles.historySection}>
-          <Text style={styles.historyTitle}>Derniers paiements validés</Text>
-          {transactions.slice(0, 2).map((tx) => (
+          <Text style={styles.historyTitle}>Tous les paiements</Text>
+          {txPage.pageItems.map((tx) => (
             <Card
               key={tx.id}
               style={styles.historyCard}
@@ -442,8 +373,19 @@ export default function ContributionsScreen() {
               </View>
             </Card>
           ))}
+          <PaginationBar
+            page={txPage.page}
+            totalPages={txPage.totalPages}
+            total={txPage.total}
+            from={txPage.from}
+            to={txPage.to}
+            onPageChange={txPage.setPage}
+            label="paiements"
+          />
         </View>
+        ) : null}
       </ScrollView>
+      )}
 
       {/* Floating CTA Button for quick new contribution */}
       <View style={styles.floatingContainer}>
@@ -520,6 +462,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginBottom: 12,
   },
+  weekNav: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  weekNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: AppColors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   calendarSectionTitle: {
     fontSize: 16,
     fontWeight: '800',
@@ -567,6 +522,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 6,
     elevation: 4,
+  },
+  dayCardToday: {
+    borderColor: AppColors.primary,
+    borderWidth: 1.5,
   },
   dayText: {
     fontSize: 18,

@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   TextInput,
   Alert,
@@ -16,6 +15,8 @@ import { AppColors } from '@/constants/colors';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
+import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
+import { scrollInputIntoView } from '@/utils/scrollInputIntoView';
 import { Badge } from '@/components/common/Badge';
 import { ProgressBar } from '@/components/common/ProgressBar';
 import { useFinanceStore } from '@/store/financeStore';
@@ -94,24 +95,39 @@ export default function ProjetDetailScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <Header
-        title="Détail du projet"
-        subtitle={projet.categorie}
-        showBack
-        onBack={() => {
-          if (router.canGoBack()) router.back();
-          else router.replace('/(tabs)/projets');
-        }}
-        variant="curved"
-      />
-
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: 90 + bottomInset }]}
-        showsVerticalScrollIndicator={false}
-      >
+    <KeyboardAwareScreen
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      header={
+        <Header
+          title="Détail du projet"
+          subtitle={projet.categorie}
+          showBack
+          onBack={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/projets');
+          }}
+          variant="curved"
+        />
+      }
+      footer={
+        <View style={[styles.bottomBar, { paddingBottom: bottomInset }]}>
+          <View>
+            <Text style={styles.totalLabel}>Montant sélectionné</Text>
+            <Text style={styles.totalValue}>
+              {parseInt(customAmount || '0', 10).toLocaleString('fr-FR')} FCFA
+            </Text>
+          </View>
+          <Button
+            title="Voir comment verser"
+            onPress={handleProceed}
+            size="md"
+            variant="primary"
+            style={styles.proceedBtn}
+          />
+        </View>
+      }
+    >
         {/* Project Header Card */}
         <View style={styles.topCardContainer}>
           <Card style={styles.mainCard} variant="elevated">
@@ -236,30 +252,13 @@ export default function ProjetDetailScreen() {
                   setSelectedTier('');
                 }}
                 placeholder="Montant en FCFA"
+                onFocus={scrollInputIntoView}
               />
               <Text style={styles.currencyTag}>FCFA</Text>
             </View>
           </View>
         </View>
-      </ScrollView>
-
-      {/* Bottom Sticky Action Bar */}
-      <View style={[styles.bottomBar, { paddingBottom: bottomInset }]}>
-        <View>
-          <Text style={styles.totalLabel}>Montant sélectionné</Text>
-          <Text style={styles.totalValue}>
-            {parseInt(customAmount || '0', 10).toLocaleString('fr-FR')} FCFA
-          </Text>
-        </View>
-        <Button
-          title="Continuer vers le paiement"
-          onPress={handleProceed}
-          size="md"
-          variant="primary"
-          style={styles.proceedBtn}
-        />
-      </View>
-    </View>
+    </KeyboardAwareScreen>
   );
 }
 
@@ -503,23 +502,14 @@ const styles = StyleSheet.create({
     color: AppColors.textMuted,
   },
   bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     backgroundColor: AppColors.white,
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: AppColors.borderLight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 8,
   },
   totalLabel: {
     fontSize: 11,

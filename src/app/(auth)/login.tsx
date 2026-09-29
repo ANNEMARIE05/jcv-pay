@@ -3,10 +3,7 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
   Alert,
 } from 'react-native';
 import { router } from 'expo-router';
@@ -16,12 +13,13 @@ import { Header } from '@/components/common/Header';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
-import { Badge } from '@/components/common/Badge';
 import { useAuthStore } from '@/store/authStore';
+import { FullScreenLoader } from '@/components/motion/BrandedLoader';
+import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('shahinur.rahman@jcvictoire.org');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
 
@@ -45,7 +43,7 @@ export default function LoginScreen() {
     }
   };
 
-  const handleQuickLogin = async (role: 'MEMBRE' | 'ADMINISTRATEUR') => {
+  const handleQuickLogin = async (role: 'MEMBRE' | 'TRESORIER' | 'ADMINISTRATEUR') => {
     setLoading(true);
     try {
       await loginAs(role);
@@ -56,22 +54,25 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
+    <KeyboardAwareScreen
       style={styles.keyboardContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Teal Header */}
+      contentContainerStyle={styles.scrollContent}
+      header={
         <Header
           title="JCV Pay"
           subtitle="Église Jésus Christ Victoire"
           variant="curved"
         />
-
+      }
+      overlay={
+        loading ? (
+          <FullScreenLoader
+            title="Connexion en cours"
+            subtitle="Ouverture de votre espace JCV Pay"
+          />
+        ) : null
+      }
+    >
         {/* Form Card */}
         <View style={styles.cardContainer}>
           <Card style={styles.formCard}>
@@ -81,51 +82,62 @@ export default function LoginScreen() {
               </View>
               <View>
                 <Text style={styles.loginTitle}>Connexion à votre espace</Text>
-                <Text style={styles.loginSubtitle}>Fidèles & Responsables financiers</Text>
+                <Text style={styles.loginSubtitle}>Choisissez votre espace, ou saisissez vos identifiants</Text>
               </View>
             </View>
 
             {/* QUICK DEMO LOGIN BUTTONS */}
             <View style={styles.quickAccessSection}>
-              <Text style={styles.quickAccessLabel}>⚡ CHOIX RAPIDE DU RÔLE (TEST IMMÉDIAT)</Text>
-
-              <TouchableOpacity
-                style={styles.demoRoleBtn}
-                onPress={() => handleQuickLogin('MEMBRE')}
-                activeOpacity={0.8}
-              >
-                <View style={styles.roleIconCircle}>
-                  <Ionicons name="person" size={20} color={AppColors.primary} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <View style={styles.roleHeaderRow}>
-                    <Text style={styles.roleName}>Mode Membre / Fidèle</Text>
-                    <Badge label="Shahinur" variant="primary" size="sm" />
+              <Text style={styles.quickAccessLabel}>Entrer comme</Text>
+              <View style={styles.roleStack}>
+                <TouchableOpacity
+                  style={styles.demoRoleBtn}
+                  onPress={() => handleQuickLogin('MEMBRE')}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.roleAccent, { backgroundColor: AppColors.primary }]} />
+                  <View style={styles.roleIconCircle}>
+                    <Ionicons name="heart-outline" size={20} color={AppColors.primary} />
                   </View>
-                  <Text style={styles.roleDesc}>Dîmes, cotisations, projets, reçus fiscaux</Text>
-                </View>
-                <Ionicons name="arrow-forward" size={18} color={AppColors.primary} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.demoRoleBtn, styles.demoAdminBtn]}
-                onPress={() => handleQuickLogin('ADMINISTRATEUR')}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.roleIconCircle, styles.adminRoleIconCircle]}>
-                  <Ionicons name="shield-checkmark" size={20} color={AppColors.accent} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 10 }}>
-                  <View style={styles.roleHeaderRow}>
-                    <Text style={[styles.roleName, { color: AppColors.primaryDark }]}>
-                      Mode Administrateur / Trésorier
-                    </Text>
-                    <Badge label="Trésorier" variant="accent" size="sm" />
+                  <View style={styles.roleCopy}>
+                    <Text style={styles.roleName}>Fidèle</Text>
+                    <Text style={styles.roleDesc}>Déclarer un versement · reçus · projets</Text>
                   </View>
-                  <Text style={styles.roleDesc}>Caisse, payeurs, historiques & retraits</Text>
-                </View>
-                <Ionicons name="arrow-forward" size={18} color={AppColors.accent} />
-              </TouchableOpacity>
+                  <Ionicons name="chevron-forward" size={18} color={AppColors.textMuted} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.demoRoleBtn}
+                  onPress={() => handleQuickLogin('TRESORIER')}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.roleAccent, { backgroundColor: AppColors.accent }]} />
+                  <View style={[styles.roleIconCircle, styles.tresorRoleIcon]}>
+                    <Ionicons name="wallet-outline" size={20} color={AppColors.accentDark} />
+                  </View>
+                  <View style={styles.roleCopy}>
+                    <Text style={styles.roleName}>Trésorier</Text>
+                    <Text style={styles.roleDesc}>Confirmer l argent · projets · caisses</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={AppColors.textMuted} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.demoRoleBtn}
+                  onPress={() => handleQuickLogin('ADMINISTRATEUR')}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.roleAccent, { backgroundColor: AppColors.primaryDark }]} />
+                  <View style={[styles.roleIconCircle, styles.adminRoleIconCircle]}>
+                    <Ionicons name="people-outline" size={20} color={AppColors.primary} />
+                  </View>
+                  <View style={styles.roleCopy}>
+                    <Text style={styles.roleName}>Administrateur</Text>
+                    <Text style={styles.roleDesc}>Comptes · projets · caisses · rôles</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color={AppColors.textMuted} />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.dividerRow}>
@@ -193,8 +205,7 @@ export default function LoginScreen() {
             </View>
           </Card>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScreen>
   );
 }
 
@@ -202,6 +213,7 @@ const styles = StyleSheet.create({
   keyboardContainer: {
     flex: 1,
     backgroundColor: AppColors.background,
+    position: 'relative',
   },
   container: {
     flex: 1,
@@ -211,7 +223,7 @@ const styles = StyleSheet.create({
   },
   cardContainer: {
     paddingHorizontal: 20,
-    marginTop: -16,
+    marginTop: 8,
   },
   formCard: {
     padding: 20,
@@ -242,59 +254,60 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   quickAccessSection: {
-    backgroundColor: '#F8FAFC',
-    borderRadius: 18,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: AppColors.borderLight,
     marginBottom: 16,
-    gap: 8,
   },
   quickAccessLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: AppColors.primary,
-    letterSpacing: 0.5,
-    marginBottom: 2,
+    fontSize: 12,
+    fontWeight: '700',
+    color: AppColors.textSecondary,
+    marginBottom: 10,
+  },
+  roleStack: {
+    gap: 8,
   },
   demoRoleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: AppColors.white,
-    padding: 10,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: AppColors.border,
+    paddingVertical: 12,
+    paddingRight: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: AppColors.borderLight,
+    overflow: 'hidden',
   },
-  demoAdminBtn: {
-    borderColor: AppColors.accent,
-    backgroundColor: '#FFFBF5',
+  roleAccent: {
+    width: 4,
+    alignSelf: 'stretch',
+    marginRight: 10,
   },
   roleIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     backgroundColor: AppColors.primaryMuted,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  adminRoleIconCircle: {
+  tresorRoleIcon: {
     backgroundColor: AppColors.accentLight,
   },
-  roleHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 2,
+  adminRoleIconCircle: {
+    backgroundColor: '#E8EEF5',
+  },
+  roleCopy: {
+    flex: 1,
+    marginLeft: 10,
   },
   roleName: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     color: AppColors.textPrimary,
   },
   roleDesc: {
-    fontSize: 10,
+    fontSize: 12,
     color: AppColors.textSecondary,
+    marginTop: 2,
   },
   optionsRow: {
     flexDirection: 'row',

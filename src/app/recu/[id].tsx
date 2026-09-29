@@ -18,9 +18,10 @@ import { Barcode } from '@/components/common/Barcode';
 import { useFinanceStore } from '@/store/financeStore';
 
 export default function RecuDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, choix } = useLocalSearchParams<{ id: string; choix?: string }>();
   const getReceiptById = useFinanceStore((s) => s.getReceiptById);
   const recu = getReceiptById(id || '');
+  const showChoice = choix === '1' || recu?.statut === 'EN_ATTENTE';
 
   if (!recu) {
     return (
@@ -109,8 +110,8 @@ export default function RecuDetailScreen() {
                   <Text style={styles.churchAddress}>{recu.egliseAdresse}</Text>
                 </View>
                 <Badge
-                  label={recu.statut === 'VALIDE' ? 'Validé' : 'En attente'}
-                  variant={recu.statut === 'VALIDE' ? 'success' : 'warning'}
+                  label={recu.statut === 'VALIDE' ? 'Validé' : recu.statut === 'REJETE' ? 'Rejeté' : 'En attente'}
+                  variant={recu.statut === 'VALIDE' ? 'success' : recu.statut === 'REJETE' ? 'danger' : 'warning'}
                   size="sm"
                 />
               </View>
@@ -203,7 +204,9 @@ export default function RecuDetailScreen() {
                 Certificat numérique : {recu.codeSecurite}
               </Text>
               <Text style={styles.stampText}>
-                Document certifié conforme par la trésorerie générale
+                {recu.statut === 'VALIDE'
+                  ? 'Document certifié conforme par la trésorerie'
+                  : 'Déclaration enregistrée. Le reçu officiel sera disponible après confirmation du versement.'}
               </Text>
             </View>
           </View>
@@ -211,23 +214,51 @@ export default function RecuDetailScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
-          <Button
-            title="Télécharger le reçu (PDF)"
-            onPress={handleDownload}
-            size="lg"
-            variant="primary"
-            icon={<Ionicons name="download-outline" size={20} color={AppColors.white} />}
-            style={styles.actionBtn}
-          />
+          {showChoice ? (
+            <View style={styles.choiceBox}>
+              <Text style={styles.choiceTitle}>Où aller ensuite ?</Text>
+              <Text style={styles.choiceHint}>
+                {recu.statut === 'VALIDE'
+                  ? 'Votre reçu est prêt.'
+                  : 'Versez l argent hors de l appli. La trésorerie confirmera, puis le reçu passera en validé.'}
+              </Text>
+              <Button
+                title="Retour à l accueil"
+                onPress={() => router.replace('/(tabs)')}
+                size="lg"
+                variant="primary"
+                style={styles.actionBtn}
+              />
+              <Button
+                title="Voir tous les reçus"
+                onPress={() => router.replace('/(tabs)/recus')}
+                size="lg"
+                variant="outline"
+                style={styles.actionBtn}
+              />
+            </View>
+          ) : null}
 
-          <Button
-            title="Partager le justificatif"
-            onPress={handleShare}
-            size="lg"
-            variant="outline"
-            icon={<Ionicons name="share-outline" size={20} color={AppColors.primary} />}
-            style={styles.actionBtn}
-          />
+          {recu.statut === 'VALIDE' ? (
+            <>
+              <Button
+                title="Télécharger le reçu (PDF)"
+                onPress={handleDownload}
+                size="lg"
+                variant={showChoice ? 'outline' : 'primary'}
+                icon={<Ionicons name="download-outline" size={20} color={showChoice ? AppColors.primary : AppColors.white} />}
+                style={styles.actionBtn}
+              />
+              <Button
+                title="Partager le justificatif"
+                onPress={handleShare}
+                size="lg"
+                variant="outline"
+                icon={<Ionicons name="share-outline" size={20} color={AppColors.primary} />}
+                style={styles.actionBtn}
+              />
+            </>
+          ) : null}
         </View>
       </ScrollView>
     </View>
@@ -462,6 +493,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     marginTop: 20,
     gap: 12,
+  },
+  choiceBox: {
+    backgroundColor: AppColors.white,
+    borderRadius: 20,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: AppColors.borderLight,
+    gap: 10,
+    marginBottom: 4,
+  },
+  choiceTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: AppColors.textPrimary,
+  },
+  choiceHint: {
+    fontSize: 13,
+    color: AppColors.textSecondary,
+    lineHeight: 18,
+    marginBottom: 4,
   },
   actionBtn: {
     width: '100%',

@@ -14,9 +14,11 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AppColors, Shadows } from '@/constants/colors';
 import { Card } from '@/components/common/Card';
-import { Badge } from '@/components/common/Badge';
 import { useAuthStore } from '@/store/authStore';
-import { useFinanceStore } from '@/store/financeStore';
+import { HomeSkeleton } from '@/components/motion/Skeleton';
+import { FadeInView } from '@/components/motion/FadeIn';
+import { useScreenReady } from '@/hooks/useScreenReady';
+import { ROLE_LABELS, canManageCampaigns } from '@/constants/roles';
 
 interface ProfileMenuItem {
   id: string;
@@ -38,9 +40,9 @@ export default function ProfilScreen() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const switchRole = useAuthStore((s) => s.switchRole);
-  const resume = useFinanceStore((s) => s.resume);
+  const staff = canManageCampaigns(user?.role);
 
-  const isAdmin = user?.role === 'ADMINISTRATEUR' || user?.role === 'TRESORIER';
+  const ready = useScreenReady(520);
 
   const handleLogout = () => {
     Alert.alert(
@@ -61,24 +63,44 @@ export default function ProfilScreen() {
   };
 
   const menuSections: { title: string; items: ProfileMenuItem[] }[] = [
-    ...(isAdmin
+    ...(staff
       ? [
           {
-            title: 'Direction & Trésorerie',
+            title: 'Gestion de l Église',
             items: [
               {
-                id: 'treasury_dashboard',
-                title: 'Tableau de bord Trésorier',
-                subtitle: 'Comptabilité, caisses & encaissements',
-                icon: 'wallet-outline',
-                route: '/tresorerie',
+                id: 'new-project',
+                title: 'Créer un projet',
+                subtitle: 'Publier une collecte',
+                icon: 'add-circle-outline',
+                route: '/projet/nouveau',
               },
               {
-                id: 'admin_dashboard',
-                title: 'Espace Administration',
-                subtitle: 'Validation des paiements, projets & membres',
-                icon: 'shield-checkmark-outline',
-                route: '/admin-panel',
+                id: 'new-caisse',
+                title: 'Ouvrir une caisse',
+                subtitle: 'Visible par les fidèles',
+                icon: 'wallet-outline',
+                route: '/caisse/nouvelle',
+              },
+              {
+                id: 'new-event',
+                title: 'Créer un événement',
+                icon: 'calendar-outline',
+                route: '/evenement/nouveau',
+              },
+              {
+                id: 'payers',
+                title: 'Tous les payeurs',
+                subtitle: 'Recherche, filtres, pagination',
+                icon: 'people-outline',
+                route: '/(tabs)/payeurs',
+              },
+              {
+                id: 'treasury',
+                title: 'Trésorerie',
+                subtitle: 'Soldes, journal, validations',
+                icon: 'stats-chart-outline',
+                route: '/tresorerie',
               },
             ],
           },
@@ -89,63 +111,34 @@ export default function ProfilScreen() {
       items: [
         {
           id: 'account',
-          title: 'Informations personnelles',
-          subtitle: `${user?.matricule} • ${user?.paroisse}`,
+          title: 'Mes informations',
           icon: 'person-outline',
           action: () =>
             Alert.alert(
               'Profil membre',
-              `Nom : ${user?.prenom} ${user?.nom}\nEmail : ${user?.email}\nTéléphone : ${user?.telephone}\nMatricule : ${user?.matricule}\nParoisse : ${user?.paroisse}\nRôle : ${user?.role}`
+              `Nom : ${`${user?.prenom ?? ''} ${user?.nom ?? ''}`.trim()}\nEmail : ${user?.email}\nTéléphone : ${user?.telephone}\nMatricule : ${user?.matricule}\nParoisse : ${user?.paroisse}\nRôle : ${user?.role}`
             ),
         },
         {
-          id: 'receipts',
-          title: 'Mes Quittances & Reçus fiscaux',
-          subtitle: 'Télécharger les attestations annuelles',
-          icon: 'receipt-outline',
-          route: '/(tabs)/recus',
-        },
-        {
           id: 'history',
-          title: 'Historique complet des versements',
-          subtitle: 'Journal détaillé de toutes vos contributions',
+          title: 'Historique',
           icon: 'time-outline',
           route: '/historique',
-        },
-        {
-          id: 'pledges',
-          title: 'Mes Engagements & Cotisations',
-          subtitle: 'Suivi des échéances et promesses',
-          icon: 'calendar-outline',
-          route: '/(tabs)/contributions',
         },
       ],
     },
     {
-      title: 'Sécurité & Préférences',
+      title: 'Compte',
       items: [
         {
-          id: 'security',
-          title: 'Sécurité & Mot de passe',
-          subtitle: 'Authentification à deux facteurs',
-          icon: 'shield-checkmark-outline',
-          action: () =>
-            Alert.alert(
-              'Sécurité',
-              'Votre compte est protégé par code PIN et vérification OTP.'
-            ),
-        },
-        {
           id: 'notifications',
-          title: 'Notifications & Alertes',
-          subtitle: 'Rappels de cotisations et cultes',
+          title: 'Notifications',
           icon: 'notifications-outline',
           route: '/notifications',
         },
         {
           id: 'help',
-          title: 'Centre d aide & Trésorerie',
-          subtitle: 'Contacter le secrétariat financier',
+          title: 'Aide',
           icon: 'help-circle-outline',
           action: () =>
             Alert.alert(
@@ -153,11 +146,6 @@ export default function ProfilScreen() {
               'Pour toute question sur vos reçus ou versements :\nEmail : tresorerie@jcvictoire.org\nTél : +225 27 22 00 11 22'
             ),
         },
-      ],
-    },
-    {
-      title: 'Compte',
-      items: [
         {
           id: 'logout',
           title: 'Déconnexion',
@@ -172,6 +160,12 @@ export default function ProfilScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={AppColors.primaryDark} />
+      {!ready ? (
+        <>
+          <View style={{ height: topPadding + 12, backgroundColor: AppColors.primaryDark }} />
+          <HomeSkeleton />
+        </>
+      ) : (
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -201,20 +195,12 @@ export default function ProfilScreen() {
           </View>
 
           <Text style={styles.profileName}>
-            {user ? `${user.prenom} ${user.nom}` : 'Membre de l Église'}
+            {user ? `${user.prenom} ${user.nom}`.trim() : 'Membre'}
           </Text>
-          <Text style={styles.profileEmail}>{user?.email}</Text>
+          <Text style={styles.profileRole}>
+            {user ? ROLE_LABELS[user.role] : 'Fidèle'}
+          </Text>
 
-          <View style={styles.memberTagRow}>
-            <Badge label={user?.matricule || 'JCV-MBR-1042'} variant="neutral" size="sm" />
-            <Badge
-              label={isAdmin ? '🛡️ Administrateur' : '👤 Membre Actif'}
-              variant={isAdmin ? 'accent' : 'primary'}
-              size="sm"
-            />
-          </View>
-
-          {/* Quick Role Switcher Button */}
           <TouchableOpacity
             style={styles.switchRoleBtn}
             onPress={() => switchRole()}
@@ -222,37 +208,9 @@ export default function ProfilScreen() {
           >
             <Ionicons name="swap-horizontal" size={16} color={AppColors.white} />
             <Text style={styles.switchRoleBtnText}>
-              {isAdmin
-                ? 'Tester le Mode Membre / Fidèle'
-                : 'Tester le Mode Trésorier / Admin'}
+              Essayer un autre rôle
             </Text>
           </TouchableOpacity>
-        </View>
-
-        {/* Quick Stats Banner */}
-        <View style={styles.statsWrapper}>
-          <Card style={styles.statsCard} variant="elevated">
-            <View style={styles.statCol}>
-              <Text style={styles.statNum}>
-                {(resume.totalContribue / 1000).toFixed(0)}k F
-              </Text>
-              <Text style={styles.statLbl}>Contributions 2026</Text>
-            </View>
-            <View style={styles.statSep} />
-            <View style={styles.statCol}>
-              <Text style={styles.statNumAccent}>
-                {(resume.resteAPayer / 1000).toFixed(0)}k F
-              </Text>
-              <Text style={styles.statLbl}>Engagements dus</Text>
-            </View>
-            <View style={styles.statSep} />
-            <View style={styles.statCol}>
-              <Text style={styles.statNum}>
-                {resume.projetsActifsCount}
-              </Text>
-              <Text style={styles.statLbl}>Projets soutenus</Text>
-            </View>
-          </Card>
         </View>
 
         {/* Menu Sections (Screen 15 Style) */}
@@ -321,13 +279,14 @@ export default function ProfilScreen() {
         </View>
 
         {/* Version info */}
-        <View style={styles.versionContainer}>
+        <FadeInView index={4} style={styles.versionContainer}>
           <Text style={styles.versionText}>JCV Pay v1.0.0 • Application Finances</Text>
           <Text style={styles.copyrightText}>
             Église Jésus Christ Victoire © 2026
           </Text>
-        </View>
+        </FadeInView>
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -403,6 +362,12 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '800',
     color: AppColors.white,
+  },
+  profileRole: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: AppColors.accent,
+    marginTop: 4,
   },
   profileEmail: {
     fontSize: 12,

@@ -1,5 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { AppColors } from '@/constants/colors';
 
 interface ProgressBarProps {
@@ -19,20 +25,31 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   backgroundColor = '#E2E8F0',
   style,
 }) => {
-  // Normalize progress between 0 and 100
   const normalized = Math.min(Math.max(progress > 1 ? progress : progress * 100, 0), 100);
+  const width = useSharedValue(0);
+
+  useEffect(() => {
+    width.value = withTiming(normalized, {
+      duration: 780,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [normalized, width]);
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: `${width.value}%`,
+  }));
 
   return (
     <View style={[styles.wrapper, style]}>
       <View style={[styles.track, { height, backgroundColor, borderRadius: height / 2 }]}>
-        <View
+        <Animated.View
           style={[
             styles.fill,
             {
-              width: `${normalized}%`,
               backgroundColor: color,
               borderRadius: height / 2,
             },
+            fillStyle,
           ]}
         />
       </View>

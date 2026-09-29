@@ -12,18 +12,30 @@ import {
   SourceCaisse,
   CaisseProjet,
 } from '@/types';
-import {
-  mockResumeFinancier,
-  mockTransactions,
-  mockCotisations,
-  mockMouvementsCaisse,
-} from '@/mocks/finances.mock';
-import { mockProjets } from '@/mocks/projets.mock';
-import { mockEvenements } from '@/mocks/evenements.mock';
-import { mockRecus } from '@/mocks/recus.mock';
+import { RoleUtilisateur, Utilisateur } from '@/types';
 import { mockUtilisateurs } from '@/mocks/utilisateurs.mock';
-import { mockCaissesProjet } from '@/mocks/caisses.mock';
-import { Utilisateur } from '@/types';
+
+export interface PayerSummary {
+  key: string;
+  nom: string;
+  telephone: string;
+  email?: string;
+  matricule?: string;
+  role?: RoleUtilisateur;
+  totalPaye: number;
+  totalDeclare: number;
+  nbPaiements: number;
+  nbValides: number;
+  nbAttente: number;
+  nbRejetes: number;
+  dernierPaiement: string;
+  aPaye: boolean;
+  transactions: Transaction[];
+}
+
+function normalizePhone(value: string) {
+  return value.replace(/[^\d]/g, '');
+}
 
 export interface NewPaymentPayload {
   titre: string;
@@ -91,18 +103,20 @@ interface FinanceState {
   getProjectById: (id: string) => Projet | undefined;
   getEventById: (id: string) => Evenement | undefined;
   getPaymentsByDonor: (nomOrPhone: string) => Transaction[];
-  getPayersSummary: () => Array<{
-    nom: string;
-    telephone: string;
-    totalPaye: number;
-    nbPaiements: number;
-    dernierPaiement: string;
-    transactions: Transaction[];
-  }>;
+  getPayersSummary: () => PayerSummary[];
   registerEvent: (eventId: string) => void;
   addProject: (projet: Omit<Projet, 'id' | 'montantCollecte' | 'participantsCount' | 'maContribution'>) => void;
   addEvent: (evenement: Omit<Evenement, 'id' | 'placesReservees' | 'estInscrit'>) => void;
   addCotisation: (cotisation: Omit<CotisationStatutaire, 'id' | 'montantVerse' | 'resteAPayer' | 'statut'>) => void;
+  addUser: (payload: {
+    nom: string;
+    prenom: string;
+    email: string;
+    telephone: string;
+    role: RoleUtilisateur;
+    departement?: string;
+  }) => Utilisateur;
+  updateUserRole: (userId: string, role: RoleUtilisateur) => void;
 }
 
 function sourceKey(source: SourceCaisse): keyof FinanceState['tresorerieGlobale'] {
@@ -119,50 +133,58 @@ function sourceKey(source: SourceCaisse): keyof FinanceState['tresorerieGlobale'
 }
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
-  resume: mockResumeFinancier,
-  transactions: mockTransactions,
-  projets: mockProjets,
-  evenements: mockEvenements,
-  recus: mockRecus,
-  cotisations: mockCotisations,
-  mouvements: mockMouvementsCaisse,
-  caissesProjet: mockCaissesProjet,
+  resume: {
+    totalContribue: 0,
+    resteAPayer: 0,
+    enAttente: 0,
+    epargneSolde: 0,
+    projetsActifsCount: 0,
+    derniereContributionDate: '',
+  },
+  transactions: [],
+  projets: [],
+  evenements: [],
+  recus: [],
+  cotisations: [],
+  mouvements: [],
+  caissesProjet: [],
   utilisateurs: mockUtilisateurs,
   tresorerieGlobale: {
-    soldeTotal: 14850000,
-    entreesMois: 3250000,
-    sortiesMois: 850000,
-    soldeCaissePhysique: 1200000,
-    soldeWave: 4500000,
-    soldeOrangeMoney: 3850000,
-    soldeBancaire: 5300000,
+    soldeTotal: 0,
+    entreesMois: 0,
+    sortiesMois: 0,
+    soldeCaissePhysique: 0,
+    soldeWave: 0,
+    soldeOrangeMoney: 0,
+    soldeBancaire: 0,
   },
 
   validatePayment: (transactionId: string) => {
     set((state) => {
       const tx = state.transactions.find((t) => t.id === transactionId || t.reference === transactionId);
-      const amount = tx ? tx.montant : 0;
+      if (!tx || tx.statut === 'VALIDE') return state;
+      const amount = tx.montant;
       const now = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const newMouvement: MouvementCaisse | null = tx
-        ? {
-            id: `mv-${Date.now()}`,
-            type: 'ENTREE',
-            montant: amount,
-            motif: `${tx.titre} — ${tx.donateurNom}`,
-            date: 'Aujourd hui',
-            heure: now,
-            source:
-              tx.moyenPaiement === 'WAVE'
-                ? 'WAVE'
-                : tx.moyenPaiement === 'ORANGE_MONEY'
-                ? 'ORANGE_MONEY'
-                : tx.moyenPaiement === 'ESPECES'
-                ? 'CAISSE_PHYSIQUE'
-                : 'BANQUE',
-            auteur: 'Trésorerie',
-            transactionId: tx.id,
-          }
-        : null;
+      const source: SourceCaisse =
+        tx.moyenPaiement === 'WAVE'
+          ? 'WAVE'
+          : tx.moyenPaiement === 'ORANGE_MONEY'
+          ? 'ORANGE_MONEY'
+          : tx.moyenPaiement === 'ESPECES'
+          ? 'CAISSE_PHYSIQUE'
+          : 'BANQUE';
+      const key = sourceKey(source);
+      const newMouvement: MouvementCaisse = {
+        id: `mv-${Date.now()}`,
+        type: 'ENTREE',
+        montant: amount,
+        motif: `${tx.titre} — ${tx.donateurNom}`,
+        date: 'Aujourd hui',
+        heure: now,
+        source,
+        auteur: 'Trésorerie',
+        transactionId: tx.id,
+      };
 
       return {
         transactions: state.transactions.map((t) =>
@@ -171,20 +193,48 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
             : t
         ),
         recus: state.recus.map((r) =>
-          r.transactionId === transactionId || r.numeroRecu === tx?.recuNumero
+          r.transactionId === tx.id || r.numeroRecu === tx.recuNumero
             ? { ...r, statut: 'VALIDE' as const }
             : r
+        ),
+        projets: state.projets.map((p) =>
+          p.id === tx.projetId
+            ? {
+                ...p,
+                montantCollecte: p.montantCollecte + amount,
+                maContribution: p.maContribution + amount,
+                participantsCount: p.participantsCount + 1,
+              }
+            : p
+        ),
+        evenements: state.evenements.map((ev) =>
+          ev.id === tx.evenementId
+            ? {
+                ...ev,
+                estInscrit: true,
+                statutPaiement: 'VALIDE' as const,
+                placesReservees: ev.placesReservees + 1,
+              }
+            : ev
+        ),
+        caissesProjet: state.caissesProjet.map((c) =>
+          c.statut === 'OUVERTE' && tx.projetId && c.projetId === tx.projetId
+            ? { ...c, montantCollecte: c.montantCollecte + amount }
+            : c
         ),
         resume: {
           ...state.resume,
           enAttente: Math.max(state.resume.enAttente - amount, 0),
+          totalContribue: state.resume.totalContribue + amount,
+          derniereContributionDate: 'Aujourd hui',
         },
         tresorerieGlobale: {
           ...state.tresorerieGlobale,
           soldeTotal: state.tresorerieGlobale.soldeTotal + amount,
           entreesMois: state.tresorerieGlobale.entreesMois + amount,
+          [key]: state.tresorerieGlobale[key] + amount,
         },
-        mouvements: newMouvement ? [newMouvement, ...state.mouvements] : state.mouvements,
+        mouvements: [newMouvement, ...state.mouvements],
       };
     });
   },
@@ -237,11 +287,11 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       total: payload.montant,
       date: formattedDate,
       heure: formattedTime,
-      statut: 'VALIDE',
+      statut: 'EN_ATTENTE',
       moyenPaiement: payload.moyenPaiement,
       egliseNom: ORG_NAME,
       egliseAdresse: ORG_ADDRESS,
-      codeSecurite: `JCV-SEC-${Math.floor(100000 + Math.random() * 900000)}-VAL`,
+      codeSecurite: `JCV-SEC-${Math.floor(100000 + Math.random() * 900000)}-ATT`,
     };
 
     const newTx: Transaction = {
@@ -252,7 +302,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       montant: payload.montant,
       date: formattedDate,
       heure: formattedTime,
-      statut: 'VALIDE',
+      statut: 'EN_ATTENTE',
       moyenPaiement: payload.moyenPaiement,
       recuNumero: receiptNum,
       projetId: payload.projetId,
@@ -261,80 +311,15 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
       donateurTelephone: payload.donateurTelephone,
     };
 
-    const source: SourceCaisse =
-      payload.moyenPaiement === 'WAVE'
-        ? 'WAVE'
-        : payload.moyenPaiement === 'ORANGE_MONEY'
-        ? 'ORANGE_MONEY'
-        : payload.moyenPaiement === 'ESPECES'
-        ? 'CAISSE_PHYSIQUE'
-        : 'BANQUE';
-
-    const newMouvement: MouvementCaisse = {
-      id: `mv-${timestamp}`,
-      type: 'ENTREE',
-      montant: payload.montant,
-      motif: `${payload.titre} — ${payload.donateurNom}`,
-      date: formattedDate,
-      heure: formattedTime,
-      source,
-      auteur: 'Système',
-      transactionId: newTx.id,
-    };
-
-    set((state) => {
-      const updatedProjets = state.projets.map((p) => {
-        if (p.id === payload.projetId) {
-          return {
-            ...p,
-            montantCollecte: p.montantCollecte + payload.montant,
-            maContribution: p.maContribution + payload.montant,
-            participantsCount: p.participantsCount + 1,
-          };
-        }
-        return p;
-      });
-
-      const updatedEvents = state.evenements.map((ev) => {
-        if (ev.id === payload.evenementId) {
-          return {
-            ...ev,
-            estInscrit: true,
-            statutPaiement: 'VALIDE' as const,
-            placesReservees: ev.placesReservees + 1,
-          };
-        }
-        return ev;
-      });
-
-      const updatedCaisses = state.caissesProjet.map((c) => {
-        if (c.statut === 'OUVERTE' && payload.projetId && c.projetId === payload.projetId) {
-          return { ...c, montantCollecte: c.montantCollecte + payload.montant };
-        }
-        return c;
-      });
-
-      const key = sourceKey(source);
-      return {
-        transactions: [newTx, ...state.transactions],
-        recus: [newRecu, ...state.recus],
-        mouvements: [newMouvement, ...state.mouvements],
-        projets: updatedProjets,
-        caissesProjet: updatedCaisses,
-        evenements: updatedEvents,
-        resume: {
-          ...state.resume,
-          totalContribue: state.resume.totalContribue + payload.montant,
-          derniereContributionDate: formattedDate,
-        },
-        tresorerieGlobale: {
-          ...state.tresorerieGlobale,
-          soldeTotal: state.tresorerieGlobale.soldeTotal + payload.montant,
-          entreesMois: state.tresorerieGlobale.entreesMois + payload.montant,
-          [key]: state.tresorerieGlobale[key] + payload.montant,
-        },
-      };
-    });
+    set((state) => ({
+      transactions: [newTx, ...state.transactions],
+      recus: [newRecu, ...state.recus],
+      resume: {
+        ...state.resume,
+        enAttente: state.resume.enAttente + payload.montant,
+        derniereContributionDate: formattedDate,
+      },
+    }));
 
     return newRecu;
   },
@@ -363,39 +348,77 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   },
 
   getPayersSummary: () => {
-    const validated = get().transactions.filter((t) => t.statut === 'VALIDE' || t.statut === 'EN_ATTENTE');
-    const map = new Map<
-      string,
-      {
-        nom: string;
-        telephone: string;
-        totalPaye: number;
-        nbPaiements: number;
-        dernierPaiement: string;
-        transactions: Transaction[];
-      }
-    >();
+    const { transactions, utilisateurs } = get();
+    const map = new Map<string, PayerSummary>();
 
-    validated.forEach((t) => {
-      const key = t.donateurTelephone || t.donateurNom;
-      const existing = map.get(key);
-      if (existing) {
-        existing.transactions.push(t);
-        existing.nbPaiements += 1;
-        if (t.statut === 'VALIDE') existing.totalPaye += t.montant;
-      } else {
-        map.set(key, {
-          nom: t.donateurNom,
-          telephone: t.donateurTelephone,
-          totalPaye: t.statut === 'VALIDE' ? t.montant : 0,
-          nbPaiements: 1,
-          dernierPaiement: `${t.date} • ${t.heure}`,
-          transactions: [t],
-        });
-      }
+    const makeKey = (phone: string, fallback: string) =>
+      normalizePhone(phone) || fallback.trim().toLowerCase();
+
+    utilisateurs.forEach((u) => {
+      const nom = `${u.prenom} ${u.nom}`.trim();
+      const key = makeKey(u.telephone, u.id);
+      map.set(key, {
+        key,
+        nom,
+        telephone: u.telephone,
+        email: u.email,
+        matricule: u.matricule,
+        role: u.role,
+        totalPaye: 0,
+        totalDeclare: 0,
+        nbPaiements: 0,
+        nbValides: 0,
+        nbAttente: 0,
+        nbRejetes: 0,
+        dernierPaiement: 'Aucun versement',
+        aPaye: false,
+        transactions: [],
+      });
     });
 
-    return Array.from(map.values()).sort((a, b) => b.totalPaye - a.totalPaye);
+    transactions.forEach((t) => {
+      const key = makeKey(t.donateurTelephone, t.donateurNom);
+      const existing = map.get(key);
+      const row: PayerSummary = existing ?? {
+        key,
+        nom: t.donateurNom,
+        telephone: t.donateurTelephone,
+        totalPaye: 0,
+        totalDeclare: 0,
+        nbPaiements: 0,
+        nbValides: 0,
+        nbAttente: 0,
+        nbRejetes: 0,
+        dernierPaiement: 'Aucun versement',
+        aPaye: false,
+        transactions: [],
+      };
+
+      row.transactions.push(t);
+      row.nbPaiements += 1;
+      row.totalDeclare += t.montant;
+      row.dernierPaiement = `${t.date} • ${t.heure}`;
+      if (t.statut === 'VALIDE') {
+        row.totalPaye += t.montant;
+        row.nbValides += 1;
+        row.aPaye = true;
+      } else if (t.statut === 'EN_ATTENTE') {
+        row.nbAttente += 1;
+      } else {
+        row.nbRejetes += 1;
+      }
+      if (!existing) {
+        row.nom = t.donateurNom;
+        row.telephone = t.donateurTelephone;
+      }
+      map.set(key, row);
+    });
+
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.aPaye !== b.aPaye) return a.aPaye ? -1 : 1;
+      if (b.totalPaye !== a.totalPaye) return b.totalPaye - a.totalPaye;
+      return a.nom.localeCompare(b.nom, 'fr');
+    });
   },
 
   registerEvent: (eventId: string) => {
@@ -620,5 +643,29 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     }));
 
     return mouvement;
+  },
+
+  addUser: (payload) => {
+    const timestamp = Date.now();
+    const user: Utilisateur = {
+      id: `usr-${timestamp}`,
+      nom: payload.nom.trim(),
+      prenom: payload.prenom.trim(),
+      email: payload.email.trim(),
+      telephone: payload.telephone.trim(),
+      matricule: `JCV-${payload.role === 'TRESORIER' ? 'TRS' : payload.role === 'MEMBRE' ? 'MBR' : 'ADM'}-${Math.floor(1000 + Math.random() * 9000)}`,
+      paroisse: 'Église Jésus Christ Victoire - Abidjan',
+      departement: payload.departement,
+      role: payload.role,
+      dateAdhesion: 'Aujourd hui',
+    };
+    set((state) => ({ utilisateurs: [user, ...state.utilisateurs] }));
+    return user;
+  },
+
+  updateUserRole: (userId, role) => {
+    set((state) => ({
+      utilisateurs: state.utilisateurs.map((u) => (u.id === userId ? { ...u, role } : u)),
+    }));
   },
 }));

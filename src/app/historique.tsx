@@ -18,6 +18,9 @@ import { Badge } from '@/components/common/Badge';
 import { TabsSelector } from '@/components/common/TabsSelector';
 import { useFinanceStore } from '@/store/financeStore';
 import { TypeContribution, StatutPaiement } from '@/types';
+import { ListSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
+import { scrollInputIntoView } from '@/utils/scrollInputIntoView';
 
 const CATEGORY_FILTERS = [
   { id: 'TOUS', label: 'Toutes les opérations' },
@@ -47,6 +50,7 @@ export default function HistoriqueScreen() {
   const [activeCategory, setActiveCategory] = useState<string>('TOUS');
   const [activeStatus, setActiveStatus] = useState<string>('TOUS');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const ready = useScreenReady(580);
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
@@ -94,18 +98,22 @@ export default function HistoriqueScreen() {
   return (
     <View style={styles.container}>
       <Header
-        title="Historique des versements"
-        subtitle="Suivi complet & Quittances officielles"
+        title="Historique"
         showBack
         variant="curved"
       />
 
+      {!ready ? (
+        <ListSkeleton count={5} />
+      ) : (
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 + bottomInset }]}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
       >
-        {/* Summary Card */}
+        {transactions.length > 0 ? (
         <View style={styles.summaryContainer}>
           <Card style={styles.summaryCard} variant="elevated">
             <View style={styles.summaryHeader}>
@@ -143,6 +151,7 @@ export default function HistoriqueScreen() {
             </View>
           </Card>
         </View>
+        ) : null}
 
         {/* Search Bar */}
         <View style={styles.searchSection}>
@@ -154,6 +163,7 @@ export default function HistoriqueScreen() {
               placeholderTextColor={AppColors.textMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
+              onFocus={scrollInputIntoView}
             />
             {searchQuery ? (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -220,12 +230,12 @@ export default function HistoriqueScreen() {
               </Text>
             </Card>
           ) : (
-            filteredTransactions.map((tx) => {
+            filteredTransactions.map((tx, i) => {
               const method = getPaymentMethodLabel(tx.moyenPaiement);
               const isValid = tx.statut === 'VALIDE';
 
               return (
-                <Card key={tx.id} style={styles.txCard} variant="elevated">
+                <Card key={tx.id} style={styles.txCard} variant="elevated" enterIndex={i}>
                   <View style={styles.txTopRow}>
                     <View style={styles.txTypeTag}>
                       <Text style={styles.txTypeTagText}>{tx.type}</Text>
@@ -280,6 +290,7 @@ export default function HistoriqueScreen() {
           )}
         </View>
       </ScrollView>
+      )}
     </View>
   );
 }
