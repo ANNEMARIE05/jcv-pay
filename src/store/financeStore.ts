@@ -49,6 +49,7 @@ export interface NewPaymentPayload {
   donateurTelephone: string;
   donateurEmail?: string;
   projetId?: string;
+  caisseProjetId?: string;
   evenementId?: string;
   cotisationId?: string;
 }

@@ -35,6 +35,7 @@ export default function PaiementScreen() {
     donateurNom?: string;
     donateurTelephone?: string;
     projetId?: string;
+    caisseProjetId?: string;
     evenementId?: string;
   }>();
 
@@ -62,6 +63,7 @@ export default function PaiementScreen() {
         donateurNom,
         donateurTelephone: phoneForPayment,
         projetId: params.projetId,
+        caisseProjetId: params.caisseProjetId,
         evenementId: params.evenementId,
       });
       if (result.checkoutUrl) {

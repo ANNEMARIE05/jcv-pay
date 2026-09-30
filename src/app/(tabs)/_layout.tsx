@@ -57,21 +57,17 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: isAdmin ? 'Gestion' : isTreasurer ? 'Caisse' : 'Accueil',
+          title: isTreasurer && !isAdmin ? 'Caisse' : 'Accueil',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={
-                isAdmin
+                isTreasurer && !isAdmin
                   ? focused
-                    ? 'people'
-                    : 'people-outline'
-                  : isTreasurer
-                    ? focused
-                      ? 'cash'
-                      : 'cash-outline'
-                    : focused
-                      ? 'home'
-                      : 'home-outline'
+                    ? 'cash'
+                    : 'cash-outline'
+                  : focused
+                    ? 'home'
+                    : 'home-outline'
               }
               size={22}
               color={color}
@@ -97,10 +93,18 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="projets"
         options={{
-          title: 'Projets',
+          title: isAdmin ? 'Gestion' : 'Projets',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'grid' : 'grid-outline'}
+              name={
+                isAdmin
+                  ? focused
+                    ? 'briefcase'
+                    : 'briefcase-outline'
+                  : focused
+                    ? 'grid'
+                    : 'grid-outline'
+              }
               size={22}
               color={color}
             />

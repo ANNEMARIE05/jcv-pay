@@ -40,6 +40,8 @@ export default function NouvelleContributionScreen() {
     type?: TypeContribution;
     titre?: string;
     preselectedAmount?: string;
+    projetId?: string;
+    caisseProjetId?: string;
   }>();
 
   const user = useAuthStore((s) => s.user);
@@ -95,6 +97,8 @@ export default function NouvelleContributionScreen() {
         montant: numAmount.toString(),
         donateurNom: finalNom,
         donateurTelephone: finalPhone,
+        ...(params.projetId ? { projetId: params.projetId } : {}),
+        ...(params.caisseProjetId ? { caisseProjetId: params.caisseProjetId } : {}),
       },
     });
   };

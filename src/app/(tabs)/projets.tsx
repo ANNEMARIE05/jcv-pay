@@ -19,7 +19,7 @@ import { PaginationBar } from '@/components/common/PaginationBar';
 import { usePagedList } from '@/hooks/usePagedList';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
-import { canManageCampaigns } from '@/constants/roles';
+import { canManageCampaigns, canManagePeople } from '@/constants/roles';
 import { CaisseDesk } from '@/components/finance/CaisseDesk';
 import { ListSkeleton } from '@/components/motion/Skeleton';
 import { useScreenReady } from '@/hooks/useScreenReady';
@@ -30,6 +30,7 @@ export default function ProjetsScreen() {
   const caissesProjet = useFinanceStore((s) => s.caissesProjet);
   const user = useAuthStore((s) => s.user);
   const staff = canManageCampaigns(user?.role);
+  const isAdmin = canManagePeople(user?.role);
 
   const [activeTab, setActiveTab] = useState<'PROJETS' | 'EVENEMENTS' | 'CAISSES'>('PROJETS');
   const [searchQuery, setSearchQuery] = useState('');
@@ -82,7 +83,7 @@ export default function ProjetsScreen() {
     <View style={styles.container}>
       {/* Header (Screen 14 style) */}
       <Header
-        title="Projets"
+        title={isAdmin ? 'Gestion' : 'Projets'}
         showBack
         onBack={() => router.replace('/(tabs)')}
         variant="curved"
@@ -136,7 +137,7 @@ export default function ProjetsScreen() {
           <View style={styles.staffBanner}>
             <Text style={styles.staffBannerText}>
               {activeTab === 'CAISSES'
-                ? 'La caisse principale reste en place. Les autres se transfèrent ou se suppriment.'
+                ? 'La caisse principale reste en place. Les autres se transfèrent, se suppriment, ou reçoivent un versement.'
                 : activeTab === 'EVENEMENTS'
                   ? 'Publiez un séminaire, une retraite ou une conférence.'
                   : 'Créez un projet : une caisse de collecte est ouverte automatiquement.'}
@@ -195,7 +196,7 @@ export default function ProjetsScreen() {
                         Objectif : {caisse.objectif.toLocaleString('fr-FR')} FCFA
                       </Text>
                     </View>
-                    {caisse.statut === 'OUVERTE' && (
+                    {caisse.statut !== 'TERMINEE' && (
                       <TouchableOpacity
                         style={styles.contributeBtn}
                         onPress={() =>
@@ -204,7 +205,8 @@ export default function ProjetsScreen() {
                             params: {
                               type: 'PROJET',
                               titre: caisse.nom,
-                              projetId: caisse.projetId || '',
+                              ...(caisse.projetId ? { projetId: caisse.projetId } : {}),
+                              caisseProjetId: caisse.id,
                             },
                           })
                         }
@@ -248,6 +250,12 @@ export default function ProjetsScreen() {
               const progressPct = Math.min(
                 Math.round((proj.montantCollecte / proj.objectif) * 100),
                 100
+              );
+              const caisseLiee = caissesProjet.find(
+                (caisse) =>
+                  caisse.projetId === proj.id &&
+                  caisse.statut !== 'TERMINEE' &&
+                  (staff || caisse.visibleAuxMembres)
               );
 
               return (
@@ -307,6 +315,26 @@ export default function ProjetsScreen() {
                   )}
 
                   {/* Action link */}
+                  {caisseLiee ? (
+                    <TouchableOpacity
+                      style={styles.contributeBtn}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/contribution/nouvelle',
+                          params: {
+                            type: 'PROJET',
+                            titre: caisseLiee.nom,
+                            projetId: proj.id,
+                            caisseProjetId: caisseLiee.id,
+                          },
+                        })
+                      }
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.contributeBtnText}>Contribuer à la caisse</Text>
+                    </TouchableOpacity>
+                  ) : null}
+
                   <View style={styles.cardFooter}>
                     <Text style={styles.organizerText}>
                       <Ionicons name="people-outline" size={13} color={AppColors.textMuted} />{' '}

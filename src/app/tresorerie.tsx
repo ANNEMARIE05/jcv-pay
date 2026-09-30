@@ -48,6 +48,7 @@ export default function TresorerieScreen() {
 
   const tresorerie = useFinanceStore((s) => s.tresorerieGlobale);
   const transactions = useFinanceStore((s) => s.transactions);
+  const projets = useFinanceStore((s) => s.projets);
   const mouvements = useFinanceStore((s) => s.mouvements);
   const utilisateurs = useFinanceStore((s) => s.utilisateurs);
   const openProjectCaisse = useFinanceStore((s) => s.openProjectCaisse);
@@ -65,6 +66,8 @@ export default function TresorerieScreen() {
   const [cashDonorPhone, setCashDonorPhone] = useState('+225 ');
   const [cashAmount, setCashAmount] = useState('');
   const [cashType, setCashType] = useState<'DIME' | 'OFFRANDE' | 'COTISATION' | 'PROJET'>('DIME');
+  const [cashProjetId, setCashProjetId] = useState('');
+  const [cashProjetOpen, setCashProjetOpen] = useState(false);
   const [cashTitle, setCashTitle] = useState('Versement en espèces (Guichet)');
 
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -78,6 +81,8 @@ export default function TresorerieScreen() {
   const ready = useScreenReady(640);
 
   const pendingPayments = transactions.filter((t) => t.statut === 'EN_ATTENTE');
+  const projetsOuverts = projets.filter((p) => p.statut !== 'CLOTURE');
+  const projetSelectionne = projets.find((p) => p.id === cashProjetId);
   const validatedPayments = transactions.filter((t) => t.statut === 'VALIDE');
   const payers = getPayersSummary();
   const soldeRestant =
@@ -97,6 +102,10 @@ export default function TresorerieScreen() {
       Alert.alert('Montant invalide', 'Veuillez saisir une somme positive.');
       return;
     }
+    if (cashType === 'PROJET' && !cashProjetId) {
+      Alert.alert('Projet requis', 'Sélectionnez le projet concerné par ce versement.');
+      return;
+    }
 
     try {
       const recu = await recordCashPayment({
@@ -104,12 +113,15 @@ export default function TresorerieScreen() {
         donateurTelephone: cashDonorPhone.trim(),
         montant: amt,
         type: cashType,
-        titre: cashTitle.trim() || 'Versement en espèces',
+        titre: cashTitle.trim() || projetSelectionne?.titre || 'Versement en espèces',
+        projetId: cashType === 'PROJET' ? cashProjetId : undefined,
       });
       setShowCashModal(false);
       setCashDonorName('');
       setCashDonorPhone('+225 ');
       setCashAmount('');
+      setCashProjetId('');
+      setCashProjetOpen(false);
       Alert.alert(
         'Encaissement Réussi !',
         `Reçu officiel N° ${recu.numeroRecu} édité pour ${cashDonorName}.\nMontant : ${amt.toLocaleString('fr-FR')} FCFA.`,
@@ -710,7 +722,11 @@ export default function TresorerieScreen() {
                   <TouchableOpacity
                     key={t.id}
                     style={[styles.typePill, cashType === t.id && styles.typePillActive]}
-                    onPress={() => setCashType(t.id as any)}
+                    onPress={() => {
+                      setCashType(t.id as 'DIME' | 'OFFRANDE' | 'COTISATION' | 'PROJET');
+                      setCashProjetId('');
+                      setCashProjetOpen(false);
+                    }}
                   >
                     <Text style={[styles.typePillText, cashType === t.id && styles.typePillTextActive]}>
                       {t.label}
@@ -718,6 +734,61 @@ export default function TresorerieScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {cashType === 'PROJET' && (
+                <>
+                  <Text style={styles.inputLabel}>Projet concerné *</Text>
+                  <TouchableOpacity
+                    style={styles.projectSelect}
+                    onPress={() => setCashProjetOpen((open) => !open)}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.projectSelectText,
+                        !projetSelectionne && styles.projectSelectPlaceholder,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {projetSelectionne ? projetSelectionne.titre : 'Choisir un projet'}
+                    </Text>
+                    <Ionicons
+                      name={cashProjetOpen ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color={AppColors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                  {cashProjetOpen && (
+                    <View style={styles.projectSelectList}>
+                      {projetsOuverts.length === 0 ? (
+                        <Text style={styles.projectEmpty}>
+                          Aucun projet ouvert. Créez-en un avant d encaisser.
+                        </Text>
+                      ) : (
+                        projetsOuverts.map((projet) => (
+                          <TouchableOpacity
+                            key={projet.id}
+                            style={[
+                              styles.projectOption,
+                              cashProjetId === projet.id && styles.projectOptionActive,
+                            ]}
+                            onPress={() => {
+                              setCashProjetId(projet.id);
+                              setCashTitle(projet.titre);
+                              setCashProjetOpen(false);
+                            }}
+                          >
+                            <Text style={styles.projectOptionTitle}>{projet.titre}</Text>
+                            <Text style={styles.projectOptionMeta}>
+                              {projet.montantCollecte.toLocaleString('fr-FR')} / {projet.objectif.toLocaleString('fr-FR')} FCFA
+                            </Text>
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
 
               <Text style={styles.inputLabel}>Nom complet du Donateur / Membre *</Text>
               <TextInput
@@ -1556,5 +1627,59 @@ const styles = StyleSheet.create({
   typePillTextActive: {
     color: AppColors.white,
     fontWeight: '700',
+  },
+  projectSelect: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: AppColors.background,
+    borderWidth: 1,
+    borderColor: AppColors.borderLight,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  projectSelectText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: AppColors.textPrimary,
+  },
+  projectSelectPlaceholder: {
+    fontWeight: '500',
+    color: AppColors.textMuted,
+  },
+  projectSelectList: {
+    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: AppColors.borderLight,
+    backgroundColor: AppColors.white,
+    overflow: 'hidden',
+  },
+  projectOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.borderLight,
+  },
+  projectOptionActive: {
+    backgroundColor: AppColors.primaryMuted,
+  },
+  projectOptionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppColors.textPrimary,
+  },
+  projectOptionMeta: {
+    fontSize: 11,
+    color: AppColors.textSecondary,
+    marginTop: 2,
+  },
+  projectEmpty: {
+    fontSize: 12,
+    color: AppColors.textMuted,
+    padding: 14,
   },
 });

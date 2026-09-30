@@ -106,6 +106,8 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const [cashDonorPhone, setCashDonorPhone] = useState('+225 ');
   const [cashAmount, setCashAmount] = useState('');
   const [cashType, setCashType] = useState<'DIME' | 'OFFRANDE' | 'COTISATION' | 'PROJET'>('DIME');
+  const [cashProjetId, setCashProjetId] = useState('');
+  const [cashProjetOpen, setCashProjetOpen] = useState(false);
   const [cashTitle, setCashTitle] = useState('Dîme reçue au secrétariat');
 
   const [withdrawAmount, setWithdrawAmount] = useState('');
@@ -120,6 +122,8 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const [newUserRole, setNewUserRole] = useState<RoleUtilisateur>('MEMBRE');
 
   const pendingPayments = transactions.filter((t) => t.statut === 'EN_ATTENTE');
+  const projetsOuverts = projets.filter((p) => p.statut !== 'CLOTURE');
+  const projetSelectionne = projets.find((p) => p.id === cashProjetId);
 
   const handleValidate = (txId: string, donateur: string, montant: number) => {
     Alert.alert(
@@ -258,6 +262,10 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
       Alert.alert('Erreur', 'Veuillez saisir le nom du fidèle et le montant en espèces.');
       return;
     }
+    if (cashType === 'PROJET' && !cashProjetId) {
+      Alert.alert('Projet requis', 'Sélectionnez le projet concerné par ce versement.');
+      return;
+    }
     const amtNum = parseInt(cashAmount.replace(/\D/g, ''), 10) || 10000;
 
     try {
@@ -266,11 +274,14 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
         donateurTelephone: cashDonorPhone.trim() || '+225 07 00 00 00 00',
         montant: amtNum,
         type: cashType,
-        titre: cashTitle || `${cashType} reçue au secrétariat`,
+        titre: cashTitle.trim() || projetSelectionne?.titre || `${cashType} reçue au secrétariat`,
+        projetId: cashType === 'PROJET' ? cashProjetId : undefined,
       });
       setShowCashModal(false);
       setCashDonorName('');
       setCashAmount('');
+      setCashProjetId('');
+      setCashProjetOpen(false);
       Alert.alert(
         'Encaissement Espèces Enregistré !',
         `Reçu officiel N° ${recu.numeroRecu} émis avec succès pour ${cashDonorName}.\nLa caisse physique a été créditée de ${amtNum.toLocaleString('fr-FR')} FCFA.`,
@@ -352,7 +363,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   return (
     <View style={styles.container}>
       <Header
-        title={embedded ? (money ? 'Caisse' : 'Gestion') : 'Espace Administration'}
+        title={embedded ? (people ? 'Accueil' : 'Caisse') : 'Espace Administration'}
         subtitle={
           money && people
             ? 'Comptes, caisses et versements'
@@ -1253,7 +1264,9 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                     style={[styles.catPickBtn, cashType === t && styles.catPickBtnActive]}
                     onPress={() => {
                       setCashType(t);
-                      setCashTitle(`${t} reçue au secrétariat`);
+                      setCashProjetId('');
+                      setCashProjetOpen(false);
+                      setCashTitle(t === 'PROJET' ? '' : `${t} reçue au secrétariat`);
                     }}
                   >
                     <Text style={[styles.catPickText, cashType === t && styles.catPickTextActive]}>
@@ -1262,6 +1275,61 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              {cashType === 'PROJET' && (
+                <>
+                  <Text style={styles.inputLabel}>Projet concerné *</Text>
+                  <TouchableOpacity
+                    style={styles.projectSelect}
+                    onPress={() => setCashProjetOpen((open) => !open)}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.projectSelectText,
+                        !projetSelectionne && styles.projectSelectPlaceholder,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {projetSelectionne ? projetSelectionne.titre : 'Choisir un projet'}
+                    </Text>
+                    <Ionicons
+                      name={cashProjetOpen ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color={AppColors.textSecondary}
+                    />
+                  </TouchableOpacity>
+                  {cashProjetOpen && (
+                    <View style={styles.projectSelectList}>
+                      {projetsOuverts.length === 0 ? (
+                        <Text style={styles.memberHint}>
+                          Aucun projet ouvert. Créez-en un avant d encaisser.
+                        </Text>
+                      ) : (
+                        projetsOuverts.map((projet) => (
+                          <TouchableOpacity
+                            key={projet.id}
+                            style={[
+                              styles.projectOption,
+                              cashProjetId === projet.id && styles.projectOptionActive,
+                            ]}
+                            onPress={() => {
+                              setCashProjetId(projet.id);
+                              setCashTitle(projet.titre);
+                              setCashProjetOpen(false);
+                            }}
+                          >
+                            <Text style={styles.projectOptionTitle}>{projet.titre}</Text>
+                            <Text style={styles.projectOptionMeta}>
+                              {projet.montantCollecte.toLocaleString('fr-FR')} / {projet.objectif.toLocaleString('fr-FR')} FCFA
+                            </Text>
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
 
               <Text style={styles.inputLabel}>Libellé sur la Quittance</Text>
               <TextInput
@@ -2166,6 +2234,55 @@ const styles = StyleSheet.create({
   },
   catPickTextActive: {
     color: AppColors.white,
+  },
+  projectSelect: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  projectSelectText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: AppColors.textPrimary,
+  },
+  projectSelectPlaceholder: {
+    fontWeight: '500',
+    color: AppColors.textMuted,
+  },
+  projectSelectList: {
+    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    backgroundColor: AppColors.white,
+    overflow: 'hidden',
+  },
+  projectOption: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: AppColors.borderLight,
+  },
+  projectOptionActive: {
+    backgroundColor: AppColors.primaryMuted,
+  },
+  projectOptionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: AppColors.textPrimary,
+  },
+  projectOptionMeta: {
+    fontSize: 11,
+    color: AppColors.textSecondary,
+    marginTop: 2,
   },
   memberHint: {
     fontSize: 11,

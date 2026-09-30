@@ -155,17 +155,24 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
                   <Text style={styles.deleteBtnText}>Supprimer</Text>
                 </TouchableOpacity>
               </View>
-              {allowContribute && caisse.statut === 'OUVERTE' ? (
+              {allowContribute && caisse.statut !== 'TERMINEE' ? (
                 <TouchableOpacity
+                  style={styles.contributeBtn}
                   onPress={() =>
                     router.push({
                       pathname: '/contribution/nouvelle',
-                      params: { type: 'PROJET', titre: caisse.nom, projetId: caisse.projetId || '' },
+                      params: {
+                        type: 'PROJET',
+                        titre: caisse.nom,
+                        ...(caisse.projetId ? { projetId: caisse.projetId } : {}),
+                        caisseProjetId: caisse.id,
+                      },
                     })
                   }
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.contribute}>Contribuer à cette caisse</Text>
+                  <Ionicons name="heart" size={16} color={AppColors.white} />
+                  <Text style={styles.contributeBtnText}>Contribuer</Text>
                 </TouchableOpacity>
               ) : null}
             </Card>
@@ -292,12 +299,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   deleteBtnText: { color: AppColors.danger, fontWeight: '700', fontSize: 13 },
-  contribute: {
-    marginTop: 10,
-    color: AppColors.primary,
-    fontWeight: '700',
-    fontSize: 13,
+  contributeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+    backgroundColor: AppColors.primary,
+    paddingVertical: 11,
+    borderRadius: 12,
   },
+  contributeBtnText: { color: AppColors.white, fontWeight: '800', fontSize: 13 },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
