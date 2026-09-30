@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,12 +15,12 @@ import { Badge } from '@/components/common/Badge';
 import { ProgressBar } from '@/components/common/ProgressBar';
 import { TabsSelector } from '@/components/common/TabsSelector';
 import { SearchBar } from '@/components/common/SearchBar';
-import { FilterChips } from '@/components/common/FilterChips';
 import { PaginationBar } from '@/components/common/PaginationBar';
 import { usePagedList } from '@/hooks/usePagedList';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
 import { canManageCampaigns } from '@/constants/roles';
+import { CaisseDesk } from '@/components/finance/CaisseDesk';
 import { ListSkeleton } from '@/components/motion/Skeleton';
 import { useScreenReady } from '@/hooks/useScreenReady';
 
@@ -29,14 +28,11 @@ export default function ProjetsScreen() {
   const projets = useFinanceStore((s) => s.projets);
   const evenements = useFinanceStore((s) => s.evenements);
   const caissesProjet = useFinanceStore((s) => s.caissesProjet);
-  const closeProjectCaisse = useFinanceStore((s) => s.closeProjectCaisse);
   const user = useAuthStore((s) => s.user);
   const staff = canManageCampaigns(user?.role);
 
   const [activeTab, setActiveTab] = useState<'PROJETS' | 'EVENEMENTS' | 'CAISSES'>('PROJETS');
   const [searchQuery, setSearchQuery] = useState('');
-  const [projetStatut, setProjetStatut] = useState<'TOUS' | 'EN_COURS' | 'CLOTURE'>('TOUS');
-  const [caisseStatut, setCaisseStatut] = useState<'TOUS' | 'OUVERTE' | 'TERMINEE'>('TOUS');
   const ready = useScreenReady(580);
 
   const filteredProjets = useMemo(() => {
@@ -46,10 +42,9 @@ export default function ProjetsScreen() {
         p.titre.toLowerCase().includes(q) ||
         p.description.toLowerCase().includes(q) ||
         p.categorie.toLowerCase().includes(q);
-      const statusOk = projetStatut === 'TOUS' || p.statut === projetStatut;
-      return searchOk && statusOk;
+      return searchOk;
     });
-  }, [projets, searchQuery, projetStatut]);
+  }, [projets, searchQuery]);
 
   const filteredEvenements = useMemo(() => {
     const q = searchQuery.toLowerCase();
@@ -69,13 +64,12 @@ export default function ProjetsScreen() {
         !q ||
         c.nom.toLowerCase().includes(q) ||
         c.description.toLowerCase().includes(q);
-      const statusOk = caisseStatut === 'TOUS' || c.statut === caisseStatut;
-      return searchOk && statusOk;
+      return searchOk;
     });
-  }, [caissesProjet, staff, searchQuery, caisseStatut]);
+  }, [caissesProjet, staff, searchQuery]);
 
-  const projetsPage = usePagedList(filteredProjets, 6, `${searchQuery}|${projetStatut}`);
-  const caissesPage = usePagedList(visibleCaisses, 6, `${searchQuery}|${caisseStatut}`);
+  const projetsPage = usePagedList(filteredProjets, 6, searchQuery);
+  const caissesPage = usePagedList(visibleCaisses, 6, searchQuery);
   const eventsPage = usePagedList(filteredEvenements, 6, searchQuery);
 
   const goCreate = () => {
@@ -138,39 +132,11 @@ export default function ProjetsScreen() {
           />
         </View>
 
-        {activeTab === 'PROJETS' ? (
-          <View style={styles.filterRow}>
-            <FilterChips
-              value={projetStatut}
-              onChange={setProjetStatut}
-              options={[
-                { id: 'TOUS', label: 'Tous', count: projets.length },
-                { id: 'EN_COURS', label: 'En cours' },
-                { id: 'CLOTURE', label: 'Terminés' },
-              ]}
-            />
-          </View>
-        ) : null}
-
-        {activeTab === 'CAISSES' ? (
-          <View style={styles.filterRow}>
-            <FilterChips
-              value={caisseStatut}
-              onChange={setCaisseStatut}
-              options={[
-                { id: 'TOUS', label: 'Toutes' },
-                { id: 'OUVERTE', label: 'Ouvertes' },
-                { id: 'TERMINEE', label: 'Terminées' },
-              ]}
-            />
-          </View>
-        ) : null}
-
         {staff ? (
           <View style={styles.staffBanner}>
             <Text style={styles.staffBannerText}>
               {activeTab === 'CAISSES'
-                ? 'Ouvrez une caisse ou clôturez une collecte terminée.'
+                ? 'La caisse principale reste en place. Les autres se transfèrent ou se suppriment.'
                 : activeTab === 'EVENEMENTS'
                   ? 'Publiez un séminaire, une retraite ou une conférence.'
                   : 'Créez un projet : une caisse de collecte est ouverte automatiquement.'}
@@ -190,100 +156,78 @@ export default function ProjetsScreen() {
 
         {activeTab === 'CAISSES' && (
           <View style={styles.listContainer}>
-            {visibleCaisses.length === 0 ? (
+            {staff ? (
+              <CaisseDesk allowContribute />
+            ) : visibleCaisses.length === 0 ? (
               <View style={styles.emptyBlock}>
                 <Text style={styles.emptyHint}>Aucune caisse.</Text>
-                {staff ? (
-                  <TouchableOpacity onPress={() => router.push('/caisse/nouvelle')}>
-                    <Text style={styles.emptyLink}>Ouvrir une caisse</Text>
-                  </TouchableOpacity>
-                ) : null}
               </View>
             ) : (
-            caissesPage.pageItems.map((caisse, i) => {
-              const percent = caisse.objectif
-                ? Math.min(Math.round((caisse.montantCollecte / caisse.objectif) * 100), 100)
-                : 0;
-              return (
-                <Card key={caisse.id} style={styles.itemCard} variant="elevated" enterIndex={i}>
-                  <View style={styles.itemTopRow}>
-                    <View style={styles.categoryPill}>
-                      <Text style={styles.categoryPillText}>Caisse</Text>
+              caissesPage.pageItems.map((caisse, i) => {
+                const percent = caisse.objectif
+                  ? Math.min(Math.round((caisse.montantCollecte / caisse.objectif) * 100), 100)
+                  : 0;
+                return (
+                  <Card key={caisse.id} style={styles.itemCard} variant="elevated" enterIndex={i}>
+                    <View style={styles.itemTopRow}>
+                      <View style={styles.categoryPill}>
+                        <Text style={styles.categoryPillText}>Caisse</Text>
+                      </View>
+                      <Badge
+                        label={caisse.statut === 'OUVERTE' ? 'Ouverte' : 'Terminée'}
+                        variant={caisse.statut === 'OUVERTE' ? 'success' : 'neutral'}
+                        size="sm"
+                      />
                     </View>
-                    <Badge
-                      label={caisse.statut === 'OUVERTE' ? 'Ouverte' : 'Terminée'}
-                      variant={caisse.statut === 'OUVERTE' ? 'success' : 'neutral'}
-                      size="sm"
-                    />
-                  </View>
-                  <Text style={styles.itemTitle}>{caisse.nom}</Text>
-                  <Text style={styles.itemDescription} numberOfLines={2}>
-                    {caisse.description}
-                  </Text>
-                  <View style={styles.progressSection}>
-                    <View style={styles.progressLabels}>
-                      <Text style={styles.progressCollected}>
-                        {caisse.montantCollecte.toLocaleString('fr-FR')} FCFA rentrés
-                      </Text>
-                      <Text style={styles.progressPercent}>{percent}%</Text>
-                    </View>
-                    <ProgressBar progress={percent / 100} height={7} />
-                    <Text style={styles.itemMeta}>
-                      Objectif : {caisse.objectif.toLocaleString('fr-FR')} FCFA
-                      {caisse.statut === 'TERMINEE' && caisse.dateCloture
-                        ? ` • Clôturée le ${caisse.dateCloture}`
-                        : ''}
+                    <Text style={styles.itemTitle}>{caisse.nom}</Text>
+                    <Text style={styles.itemDescription} numberOfLines={2}>
+                      {caisse.description}
                     </Text>
-                  </View>
-                  {caisse.statut === 'OUVERTE' && (
-                    <TouchableOpacity
-                      style={styles.contributeBtn}
-                      onPress={() =>
-                        router.push({
-                          pathname: '/contribution/nouvelle',
-                          params: {
-                            type: 'PROJET',
-                            titre: caisse.nom,
-                            projetId: caisse.projetId || '',
-                          },
-                        })
-                      }
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.contributeBtnText}>Contribuer à cette caisse</Text>
-                    </TouchableOpacity>
-                  )}
-                  {staff && caisse.statut === 'OUVERTE' ? (
-                    <TouchableOpacity
-                      style={styles.closeStaffBtn}
-                      onPress={() => {
-                        Alert.alert(
-                          'Clôturer cette caisse ?',
-                          `Marquer « ${caisse.nom} » comme terminée ?`,
-                          [
-                            { text: 'Annuler', style: 'cancel' },
-                            { text: 'Oui', onPress: () => closeProjectCaisse(caisse.id) },
-                          ]
-                        );
-                      }}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={styles.closeStaffBtnText}>Marquer terminée</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </Card>
-              );
-            })
+                    <View style={styles.progressSection}>
+                      <View style={styles.progressLabels}>
+                        <Text style={styles.progressCollected}>
+                          {caisse.montantCollecte.toLocaleString('fr-FR')} FCFA rentrés
+                        </Text>
+                        <Text style={styles.progressPercent}>{percent}%</Text>
+                      </View>
+                      <ProgressBar progress={percent / 100} height={7} />
+                      <Text style={styles.itemMeta}>
+                        Objectif : {caisse.objectif.toLocaleString('fr-FR')} FCFA
+                      </Text>
+                    </View>
+                    {caisse.statut === 'OUVERTE' && (
+                      <TouchableOpacity
+                        style={styles.contributeBtn}
+                        onPress={() =>
+                          router.push({
+                            pathname: '/contribution/nouvelle',
+                            params: {
+                              type: 'PROJET',
+                              titre: caisse.nom,
+                              projetId: caisse.projetId || '',
+                            },
+                          })
+                        }
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.contributeBtnText}>Contribuer à cette caisse</Text>
+                      </TouchableOpacity>
+                    )}
+                  </Card>
+                );
+              })
             )}
-            <PaginationBar
-              page={caissesPage.page}
-              totalPages={caissesPage.totalPages}
-              total={caissesPage.total}
-              from={caissesPage.from}
-              to={caissesPage.to}
-              onPageChange={caissesPage.setPage}
-              label="caisses"
-            />
+            {!staff ? (
+              <PaginationBar
+                page={caissesPage.page}
+                totalPages={caissesPage.totalPages}
+                total={caissesPage.total}
+                from={caissesPage.from}
+                to={caissesPage.to}
+                onPageChange={caissesPage.setPage}
+                label="caisses"
+              />
+            ) : null}
           </View>
         )}
 

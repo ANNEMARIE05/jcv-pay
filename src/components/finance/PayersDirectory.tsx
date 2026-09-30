@@ -6,39 +6,14 @@ import { AppColors } from '@/constants/colors';
 import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { SearchBar } from '@/components/common/SearchBar';
-import { FilterChips } from '@/components/common/FilterChips';
 import { PaginationBar } from '@/components/common/PaginationBar';
 import { TabsSelector } from '@/components/common/TabsSelector';
 import { usePagedList } from '@/hooks/usePagedList';
 import { PayerSummary, useFinanceStore } from '@/store/financeStore';
-import { MoyenPaiement, StatutPaiement, Transaction, TypeContribution } from '@/types';
+import { StatutPaiement, Transaction } from '@/types';
 import { ROLE_LABELS } from '@/constants/roles';
 
 type ViewMode = 'PERSONNES' | 'VERSEMENTS';
-type PeopleFilter = 'TOUS' | 'PAYE' | 'ATTENTE' | 'NON_PAYE' | 'REJETE';
-type TypeFilter = 'TOUS' | TypeContribution;
-type StatusFilter = 'TOUS' | StatutPaiement;
-type MoyenFilter = 'TOUS' | MoyenPaiement;
-
-const TYPE_OPTIONS: { id: TypeFilter; label: string }[] = [
-  { id: 'TOUS', label: 'Tous types' },
-  { id: 'DIME', label: 'Dîme' },
-  { id: 'OFFRANDE', label: 'Offrande' },
-  { id: 'COTISATION', label: 'Cotisation' },
-  { id: 'PROJET', label: 'Projet' },
-  { id: 'EVENEMENT', label: 'Événement' },
-  { id: 'EPARGNE', label: 'Épargne' },
-  { id: 'LIBRE', label: 'Don libre' },
-];
-
-const MOYEN_OPTIONS: { id: MoyenFilter; label: string }[] = [
-  { id: 'TOUS', label: 'Tous moyens' },
-  { id: 'WAVE', label: 'Wave' },
-  { id: 'ORANGE_MONEY', label: 'Orange Money' },
-  { id: 'ESPECES', label: 'Espèces' },
-  { id: 'VIREMENT', label: 'Virement' },
-  { id: 'CARTE_BANCAIRE', label: 'Carte' },
-];
 
 const STATUS_LABEL: Record<StatutPaiement, string> = {
   VALIDE: 'Validé',
@@ -62,74 +37,43 @@ export function PayersDirectory() {
 
   const [mode, setMode] = useState<ViewMode>('PERSONNES');
   const [query, setQuery] = useState('');
-  const [peopleFilter, setPeopleFilter] = useState<PeopleFilter>('TOUS');
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('TOUS');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('TOUS');
-  const [moyenFilter, setMoyenFilter] = useState<MoyenFilter>('TOUS');
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const filteredPeople = useMemo(() => {
     return payers.filter((p) => {
       const q = query.trim();
-      const searchOk =
+      return (
         !q ||
         matchesQuery(p.nom, q) ||
         matchesQuery(p.telephone, q) ||
         matchesQuery(p.email || '', q) ||
-        matchesQuery(p.matricule || '', q);
-      if (!searchOk) return false;
-
-      if (peopleFilter === 'PAYE' && !p.aPaye) return false;
-      if (peopleFilter === 'NON_PAYE' && p.nbPaiements > 0) return false;
-      if (peopleFilter === 'ATTENTE' && p.nbAttente === 0) return false;
-      if (peopleFilter === 'REJETE' && p.nbRejetes === 0) return false;
-
-      if (typeFilter !== 'TOUS' && !p.transactions.some((t) => t.type === typeFilter)) return false;
-      if (moyenFilter !== 'TOUS' && !p.transactions.some((t) => t.moyenPaiement === moyenFilter)) {
-        return false;
-      }
-      return true;
+        matchesQuery(p.matricule || '', q)
+      );
     });
-  }, [payers, query, peopleFilter, typeFilter, moyenFilter]);
+  }, [payers, query]);
 
   const filteredTx = useMemo(() => {
     return transactions.filter((t) => {
       const q = query.trim();
-      const searchOk =
+      return (
         !q ||
         matchesQuery(t.donateurNom, q) ||
         matchesQuery(t.donateurTelephone, q) ||
         matchesQuery(t.titre, q) ||
-        matchesQuery(t.reference, q);
-      if (!searchOk) return false;
-      if (statusFilter !== 'TOUS' && t.statut !== statusFilter) return false;
-      if (typeFilter !== 'TOUS' && t.type !== typeFilter) return false;
-      if (moyenFilter !== 'TOUS' && t.moyenPaiement !== moyenFilter) return false;
-      return true;
+        matchesQuery(t.reference, q)
+      );
     });
-  }, [transactions, query, statusFilter, typeFilter, moyenFilter]);
+  }, [transactions, query]);
 
-  const peoplePage = usePagedList(
-    filteredPeople,
-    8,
-    `${query}|${peopleFilter}|${typeFilter}|${moyenFilter}`
-  );
-  const txPage = usePagedList(
-    filteredTx,
-    8,
-    `${query}|${statusFilter}|${typeFilter}|${moyenFilter}`
-  );
-
-  const paidCount = payers.filter((p) => p.aPaye).length;
-  const waitingCount = payers.filter((p) => p.nbAttente > 0).length;
-  const unpaidCount = payers.filter((p) => p.nbPaiements === 0).length;
+  const peoplePage = usePagedList(filteredPeople, 8, query);
+  const txPage = usePagedList(filteredTx, 8, query);
 
   return (
     <View>
       <View style={styles.modeWrap}>
         <TabsSelector
           tabs={[
-            { id: 'PERSONNES', label: 'Personnes', count: payers.length },
+            { id: 'PERSONNES', label: 'Fidèles', count: payers.length },
             { id: 'VERSEMENTS', label: 'Versements', count: transactions.length },
           ]}
           activeTab={mode}
@@ -144,60 +88,18 @@ export function PayersDirectory() {
           onChange={setQuery}
           placeholder={
             mode === 'PERSONNES'
-              ? 'Nom, téléphone, email, matricule…'
-              : 'Donateur, titre, référence…'
+              ? 'Nom, téléphone, matricule…'
+              : 'Nom, titre, référence…'
           }
         />
       </View>
 
-      <View style={styles.statsRow}>
-        <Text style={styles.stat}>{payers.length} inscrits</Text>
-        <Text style={styles.statDot}>·</Text>
-        <Text style={styles.stat}>{paidCount} ont payé</Text>
-        <Text style={styles.statDot}>·</Text>
-        <Text style={styles.stat}>{unpaidCount} sans versement</Text>
-        <Text style={styles.statDot}>·</Text>
-        <Text style={styles.stat}>{waitingCount} en attente</Text>
-      </View>
-
-      {mode === 'PERSONNES' ? (
-        <View style={styles.filters}>
-          <FilterChips
-            value={peopleFilter}
-            onChange={setPeopleFilter}
-            options={[
-              { id: 'TOUS', label: 'Tous', count: payers.length },
-              { id: 'PAYE', label: 'Ont payé', count: paidCount },
-              { id: 'NON_PAYE', label: 'Pas encore', count: unpaidCount },
-              { id: 'ATTENTE', label: 'En attente', count: waitingCount },
-              { id: 'REJETE', label: 'Rejetés' },
-            ]}
-          />
-          <FilterChips value={typeFilter} onChange={setTypeFilter} options={TYPE_OPTIONS} />
-          <FilterChips value={moyenFilter} onChange={setMoyenFilter} options={MOYEN_OPTIONS} />
-        </View>
-      ) : (
-        <View style={styles.filters}>
-          <FilterChips
-            value={statusFilter}
-            onChange={setStatusFilter}
-            options={[
-              { id: 'TOUS', label: 'Tous statuts', count: transactions.length },
-              { id: 'VALIDE', label: 'Validés' },
-              { id: 'EN_ATTENTE', label: 'En attente' },
-              { id: 'REJETE', label: 'Rejetés' },
-              { id: 'ANNULE', label: 'Annulés' },
-            ]}
-          />
-          <FilterChips value={typeFilter} onChange={setTypeFilter} options={TYPE_OPTIONS} />
-          <FilterChips value={moyenFilter} onChange={setMoyenFilter} options={MOYEN_OPTIONS} />
-        </View>
-      )}
+      <Text style={styles.statLine}>{payers.length} fidèles dans l’assemblée</Text>
 
       {mode === 'PERSONNES' ? (
         <>
           {peoplePage.pageItems.length === 0 ? (
-            <Text style={styles.empty}>Aucune personne ne correspond à la recherche.</Text>
+            <Text style={styles.empty}>Aucun fidèle ne correspond à la recherche.</Text>
           ) : (
             peoplePage.pageItems.map((p) => (
               <PayerCard
@@ -215,13 +117,13 @@ export function PayersDirectory() {
             from={peoplePage.from}
             to={peoplePage.to}
             onPageChange={peoplePage.setPage}
-            label="personnes"
+            label="fidèles"
           />
         </>
       ) : (
         <>
           {txPage.pageItems.length === 0 ? (
-            <Text style={styles.empty}>Aucun versement ne correspond aux filtres.</Text>
+            <Text style={styles.empty}>Aucun versement pour le moment.</Text>
           ) : (
             txPage.pageItems.map((tx) => <TxCard key={tx.id} tx={tx} />)
           )}
@@ -251,7 +153,7 @@ function PayerCard({
 }) {
   const status =
     payer.aPaye
-      ? 'A payé'
+      ? 'A versé'
       : payer.nbAttente > 0
         ? 'En attente'
         : payer.nbPaiements > 0
@@ -337,16 +239,12 @@ function TxRow({ tx, showDonor = false }: { tx: Transaction; showDonor?: boolean
 const styles = StyleSheet.create({
   modeWrap: { marginBottom: 12 },
   searchWrap: { marginBottom: 10 },
-  statsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    marginBottom: 10,
-    gap: 4,
+  statLine: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppColors.textSecondary,
+    marginBottom: 12,
   },
-  stat: { fontSize: 12, fontWeight: '700', color: AppColors.textSecondary },
-  statDot: { color: AppColors.textMuted },
-  filters: { gap: 8, marginBottom: 12 },
   empty: {
     textAlign: 'center',
     color: AppColors.textMuted,

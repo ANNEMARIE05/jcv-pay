@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { api } from '@/api/client';
 import {
   ResumeFinancier,
   Transaction,
@@ -11,9 +12,11 @@ import {
   MouvementCaisse,
   SourceCaisse,
   CaisseProjet,
+  RoleUtilisateur,
+  Utilisateur,
+  NotificationItem,
 } from '@/types';
-import { RoleUtilisateur, Utilisateur } from '@/types';
-import { mockUtilisateurs } from '@/mocks/utilisateurs.mock';
+import { useNotificationStore } from '@/store/notificationStore';
 
 export interface PayerSummary {
   key: string;
@@ -47,10 +50,32 @@ export interface NewPaymentPayload {
   donateurEmail?: string;
   projetId?: string;
   evenementId?: string;
+  cotisationId?: string;
 }
 
-const ORG_NAME = 'Église Jésus Christ Victoire';
-const ORG_ADDRESS = 'Boulevard de la Victoire, Abidjan';
+export interface EspacePayload {
+  resume: ResumeFinancier;
+  transactions: Transaction[];
+  projets: Projet[];
+  evenements: Evenement[];
+  recus: Recu[];
+  cotisations: CotisationStatutaire[];
+  mouvements: MouvementCaisse[];
+  caissesProjet: CaisseProjet[];
+  utilisateurs: Utilisateur[];
+  notifications?: NotificationItem[];
+  tresorerieGlobale: FinanceState['tresorerieGlobale'];
+}
+
+const emptyTreasury = {
+  soldeTotal: 0,
+  entreesMois: 0,
+  sortiesMois: 0,
+  soldeCaissePhysique: 0,
+  soldeWave: 0,
+  soldeOrangeMoney: 0,
+  soldeBancaire: 0,
+};
 
 interface FinanceState {
   resume: ResumeFinancier;
@@ -62,17 +87,9 @@ interface FinanceState {
   mouvements: MouvementCaisse[];
   caissesProjet: CaisseProjet[];
   utilisateurs: Utilisateur[];
-  tresorerieGlobale: {
-    soldeTotal: number;
-    entreesMois: number;
-    sortiesMois: number;
-    soldeCaissePhysique: number;
-    soldeWave: number;
-    soldeOrangeMoney: number;
-    soldeBancaire: number;
-  };
-
-  processPayment: (payload: NewPaymentPayload) => Promise<Recu>;
+  tresorerieGlobale: typeof emptyTreasury;
+  processPayment: (payload: NewPaymentPayload) => Promise<{ recu: Recu; checkoutUrl?: string | null; transactionId: string }>;
+  syncPayment: (transactionId: string) => Promise<void>;
   recordCashPayment: (payload: {
     donateurNom: string;
     donateurTelephone: string;
@@ -82,32 +99,32 @@ interface FinanceState {
     titre: string;
     projetId?: string;
     caisseProjetId?: string;
-  }) => Recu;
+  }) => Promise<Recu>;
   recordWithdrawal: (payload: {
     montant: number;
     motif: string;
     source: SourceCaisse;
     auteur: string;
     beneficiaire?: string;
-  }) => MouvementCaisse | null;
+  }) => Promise<MouvementCaisse | null>;
   openProjectCaisse: (payload: {
     nom: string;
     description: string;
     projetId?: string;
     objectif: number;
-  }) => CaisseProjet;
-  closeProjectCaisse: (caisseId: string) => void;
-  validatePayment: (transactionId: string) => void;
-  rejectPayment: (transactionId: string) => void;
+  }) => Promise<CaisseProjet | void>;
+  closeProjectCaisse: (caisseId: string) => Promise<void>;
+  validatePayment: (transactionId: string) => Promise<void>;
+  rejectPayment: (transactionId: string) => Promise<void>;
   getReceiptById: (id: string) => Recu | undefined;
   getProjectById: (id: string) => Projet | undefined;
   getEventById: (id: string) => Evenement | undefined;
   getPaymentsByDonor: (nomOrPhone: string) => Transaction[];
   getPayersSummary: () => PayerSummary[];
-  registerEvent: (eventId: string) => void;
-  addProject: (projet: Omit<Projet, 'id' | 'montantCollecte' | 'participantsCount' | 'maContribution'>) => void;
-  addEvent: (evenement: Omit<Evenement, 'id' | 'placesReservees' | 'estInscrit'>) => void;
-  addCotisation: (cotisation: Omit<CotisationStatutaire, 'id' | 'montantVerse' | 'resteAPayer' | 'statut'>) => void;
+  registerEvent: (eventId: string) => Promise<void>;
+  addProject: (projet: Omit<Projet, 'id' | 'montantCollecte' | 'participantsCount' | 'maContribution'>) => Promise<void>;
+  addEvent: (evenement: Omit<Evenement, 'id' | 'placesReservees' | 'estInscrit'>) => Promise<void>;
+  addCotisation: (cotisation: Omit<CotisationStatutaire, 'id' | 'montantVerse' | 'resteAPayer' | 'statut'>) => Promise<void>;
   addUser: (payload: {
     nom: string;
     prenom: string;
@@ -115,21 +132,36 @@ interface FinanceState {
     telephone: string;
     role: RoleUtilisateur;
     departement?: string;
-  }) => Utilisateur;
-  updateUserRole: (userId: string, role: RoleUtilisateur) => void;
+  }) => Promise<Utilisateur & { motDePasseTemporaire?: string }>;
+  updateUserRole: (userId: string, role: RoleUtilisateur) => Promise<void>;
+  addFidele: (payload: { prenom: string; nom: string; telephone: string }) => void;
 }
 
-function sourceKey(source: SourceCaisse): keyof FinanceState['tresorerieGlobale'] {
-  switch (source) {
-    case 'WAVE':
-      return 'soldeWave';
-    case 'ORANGE_MONEY':
-      return 'soldeOrangeMoney';
-    case 'BANQUE':
-      return 'soldeBancaire';
-    default:
-      return 'soldeCaissePhysique';
+export function applyEspace(espace: EspacePayload) {
+  useFinanceStore.setState({
+    resume: espace.resume,
+    transactions: espace.transactions,
+    projets: espace.projets,
+    evenements: espace.evenements,
+    recus: espace.recus,
+    cotisations: espace.cotisations,
+    mouvements: espace.mouvements,
+    caissesProjet: espace.caissesProjet,
+    utilisateurs: espace.utilisateurs,
+    tresorerieGlobale: espace.tresorerieGlobale,
+  });
+  if (espace.notifications) {
+    useNotificationStore.setState({
+      notifications: espace.notifications,
+      unreadCount: espace.notifications.filter((item) => !item.lue).length,
+    });
   }
+}
+
+async function postEspace(path: string, body?: unknown) {
+  const espace = await api.post<EspacePayload>(path, body);
+  applyEspace(espace);
+  return espace;
 }
 
 export const useFinanceStore = create<FinanceState>((set, get) => ({
@@ -148,197 +180,69 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   cotisations: [],
   mouvements: [],
   caissesProjet: [],
-  utilisateurs: mockUtilisateurs,
-  tresorerieGlobale: {
-    soldeTotal: 0,
-    entreesMois: 0,
-    sortiesMois: 0,
-    soldeCaissePhysique: 0,
-    soldeWave: 0,
-    soldeOrangeMoney: 0,
-    soldeBancaire: 0,
+  utilisateurs: [],
+  tresorerieGlobale: emptyTreasury,
+
+  processPayment: async (payload) => {
+    const data = await api.post<{
+      recu: Recu;
+      checkoutUrl?: string | null;
+      transaction: Transaction;
+      espace: EspacePayload;
+    }>('/api/paiements', payload);
+    applyEspace(data.espace);
+    return { recu: data.recu, checkoutUrl: data.checkoutUrl, transactionId: data.transaction.id };
   },
 
-  validatePayment: (transactionId: string) => {
-    set((state) => {
-      const tx = state.transactions.find((t) => t.id === transactionId || t.reference === transactionId);
-      if (!tx || tx.statut === 'VALIDE') return state;
-      const amount = tx.montant;
-      const now = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-      const source: SourceCaisse =
-        tx.moyenPaiement === 'WAVE'
-          ? 'WAVE'
-          : tx.moyenPaiement === 'ORANGE_MONEY'
-          ? 'ORANGE_MONEY'
-          : tx.moyenPaiement === 'ESPECES'
-          ? 'CAISSE_PHYSIQUE'
-          : 'BANQUE';
-      const key = sourceKey(source);
-      const newMouvement: MouvementCaisse = {
-        id: `mv-${Date.now()}`,
-        type: 'ENTREE',
-        montant: amount,
-        motif: `${tx.titre} — ${tx.donateurNom}`,
-        date: 'Aujourd hui',
-        heure: now,
-        source,
-        auteur: 'Trésorerie',
-        transactionId: tx.id,
-      };
-
-      return {
-        transactions: state.transactions.map((t) =>
-          t.id === transactionId || t.reference === transactionId
-            ? { ...t, statut: 'VALIDE' as const }
-            : t
-        ),
-        recus: state.recus.map((r) =>
-          r.transactionId === tx.id || r.numeroRecu === tx.recuNumero
-            ? { ...r, statut: 'VALIDE' as const }
-            : r
-        ),
-        projets: state.projets.map((p) =>
-          p.id === tx.projetId
-            ? {
-                ...p,
-                montantCollecte: p.montantCollecte + amount,
-                maContribution: p.maContribution + amount,
-                participantsCount: p.participantsCount + 1,
-              }
-            : p
-        ),
-        evenements: state.evenements.map((ev) =>
-          ev.id === tx.evenementId
-            ? {
-                ...ev,
-                estInscrit: true,
-                statutPaiement: 'VALIDE' as const,
-                placesReservees: ev.placesReservees + 1,
-              }
-            : ev
-        ),
-        caissesProjet: state.caissesProjet.map((c) =>
-          c.statut === 'OUVERTE' && tx.projetId && c.projetId === tx.projetId
-            ? { ...c, montantCollecte: c.montantCollecte + amount }
-            : c
-        ),
-        resume: {
-          ...state.resume,
-          enAttente: Math.max(state.resume.enAttente - amount, 0),
-          totalContribue: state.resume.totalContribue + amount,
-          derniereContributionDate: 'Aujourd hui',
-        },
-        tresorerieGlobale: {
-          ...state.tresorerieGlobale,
-          soldeTotal: state.tresorerieGlobale.soldeTotal + amount,
-          entreesMois: state.tresorerieGlobale.entreesMois + amount,
-          [key]: state.tresorerieGlobale[key] + amount,
-        },
-        mouvements: [newMouvement, ...state.mouvements],
-      };
-    });
+  syncPayment: async (transactionId) => {
+    const data = await api.post<{ espace: EspacePayload }>(`/api/paiements/${transactionId}/synchroniser`);
+    applyEspace(data.espace);
   },
 
-  rejectPayment: (transactionId: string) => {
-    set((state) => {
-      const tx = state.transactions.find((t) => t.id === transactionId || t.reference === transactionId);
-      const amount = tx ? tx.montant : 0;
-      return {
-        transactions: state.transactions.map((t) =>
-          t.id === transactionId || t.reference === transactionId
-            ? { ...t, statut: 'REJETE' as const }
-            : t
-        ),
-        recus: state.recus.map((r) =>
-          r.transactionId === transactionId ? { ...r, statut: 'REJETE' as const } : r
-        ),
-        resume: {
-          ...state.resume,
-          enAttente: Math.max(state.resume.enAttente - amount, 0),
-        },
-      };
-    });
+  recordCashPayment: async (payload) => {
+    const data = await api.post<{ recu: Recu; espace: EspacePayload }>('/api/paiements/especes', payload);
+    applyEspace(data.espace);
+    return data.recu;
   },
 
-  processPayment: async (payload: NewPaymentPayload) => {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    const timestamp = Date.now();
-    const formattedDate = 'Aujourd hui';
-    const formattedTime = new Date().toLocaleTimeString('fr-FR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    const receiptNum = `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    const txRef = `TXN-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    const newRecu: Recu = {
-      id: `rec-${timestamp}`,
-      numeroRecu: receiptNum,
-      transactionId: `tx-${timestamp}`,
-      titre: payload.titre,
-      type: payload.type,
-      donateurNom: payload.donateurNom,
-      donateurMatricule: 'JCV-MBR-1042',
-      donateurTelephone: payload.donateurTelephone,
-      donateurEmail: payload.donateurEmail || 'membre@jcvictoire.org',
-      montant: payload.montant,
-      frais: 0,
-      total: payload.montant,
-      date: formattedDate,
-      heure: formattedTime,
-      statut: 'EN_ATTENTE',
-      moyenPaiement: payload.moyenPaiement,
-      egliseNom: ORG_NAME,
-      egliseAdresse: ORG_ADDRESS,
-      codeSecurite: `JCV-SEC-${Math.floor(100000 + Math.random() * 900000)}-ATT`,
-    };
-
-    const newTx: Transaction = {
-      id: `tx-${timestamp}`,
-      reference: txRef,
-      titre: payload.titre,
-      type: payload.type,
-      montant: payload.montant,
-      date: formattedDate,
-      heure: formattedTime,
-      statut: 'EN_ATTENTE',
-      moyenPaiement: payload.moyenPaiement,
-      recuNumero: receiptNum,
-      projetId: payload.projetId,
-      evenementId: payload.evenementId,
-      donateurNom: payload.donateurNom,
-      donateurTelephone: payload.donateurTelephone,
-    };
-
-    set((state) => ({
-      transactions: [newTx, ...state.transactions],
-      recus: [newRecu, ...state.recus],
-      resume: {
-        ...state.resume,
-        enAttente: state.resume.enAttente + payload.montant,
-        derniereContributionDate: formattedDate,
-      },
-    }));
-
-    return newRecu;
+  recordWithdrawal: async (payload) => {
+    try {
+      const data = await api.post<{ mouvement: MouvementCaisse; espace: EspacePayload }>(
+        '/api/mouvements/sortie',
+        payload
+      );
+      applyEspace(data.espace);
+      return data.mouvement;
+    } catch (error) {
+      if (error instanceof Error && error.message.toLowerCase().includes('solde')) return null;
+      throw error;
+    }
   },
 
-  getReceiptById: (id: string) => {
-    return get().recus.find(
-      (r) => r.id === id || r.numeroRecu === id || r.transactionId === id
-    );
+  openProjectCaisse: async (payload) => {
+    await postEspace('/api/caisses', payload);
   },
 
-  getProjectById: (id: string) => {
-    return get().projets.find((p) => p.id === id);
+  closeProjectCaisse: async (caisseId) => {
+    await postEspace(`/api/caisses/${caisseId}/cloturer`);
   },
 
-  getEventById: (id: string) => {
-    return get().evenements.find((e) => e.id === id);
+  validatePayment: async (transactionId) => {
+    await postEspace(`/api/paiements/${transactionId}/valider`);
   },
 
-  getPaymentsByDonor: (nomOrPhone: string) => {
+  rejectPayment: async (transactionId) => {
+    await postEspace(`/api/paiements/${transactionId}/rejeter`);
+  },
+
+  getReceiptById: (id) => {
+    return get().recus.find((r) => r.id === id || r.numeroRecu === id || r.transactionId === id);
+  },
+
+  getProjectById: (id) => get().projets.find((p) => p.id === id),
+  getEventById: (id) => get().evenements.find((e) => e.id === id),
+
+  getPaymentsByDonor: (nomOrPhone) => {
     const q = nomOrPhone.toLowerCase();
     return get().transactions.filter(
       (t) =>
@@ -350,9 +254,7 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
   getPayersSummary: () => {
     const { transactions, utilisateurs } = get();
     const map = new Map<string, PayerSummary>();
-
-    const makeKey = (phone: string, fallback: string) =>
-      normalizePhone(phone) || fallback.trim().toLowerCase();
+    const makeKey = (phone: string, fallback: string) => normalizePhone(phone) || fallback.trim().toLowerCase();
 
     utilisateurs.forEach((u) => {
       const nom = `${u.prenom} ${u.nom}`.trim();
@@ -393,7 +295,6 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
         aPaye: false,
         transactions: [],
       };
-
       row.transactions.push(t);
       row.nbPaiements += 1;
       row.totalDeclare += t.montant;
@@ -421,251 +322,48 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     });
   },
 
-  registerEvent: (eventId: string) => {
-    set((state) => ({
-      evenements: state.evenements.map((ev) =>
-        ev.id === eventId ? { ...ev, estInscrit: true } : ev
-      ),
-    }));
+  registerEvent: async (eventId) => {
+    await postEspace(`/api/evenements/${eventId}/inscription`);
   },
 
-  addProject: (projetData) => {
-    const timestamp = Date.now();
-    const newProjet: Projet = {
-      ...projetData,
-      id: `proj-${timestamp}`,
-      montantCollecte: 0,
-      participantsCount: 0,
-      maContribution: 0,
-    };
-    const newCaisse: CaisseProjet = {
-      id: `caisse-proj-${timestamp}`,
-      nom: `Caisse — ${projetData.titre}`,
-      description: projetData.description,
-      projetId: newProjet.id,
-      montantCollecte: 0,
-      objectif: projetData.objectif,
-      statut: 'OUVERTE',
-      visibleAuxMembres: true,
-      dateOuverture: 'Aujourd hui',
-    };
-    set((state) => ({
-      projets: [newProjet, ...state.projets],
-      caissesProjet: [newCaisse, ...state.caissesProjet],
-      resume: {
-        ...state.resume,
-        projetsActifsCount: state.resume.projetsActifsCount + 1,
-      },
-    }));
+  addProject: async (projetData) => {
+    await postEspace('/api/projets', projetData);
   },
 
-  openProjectCaisse: (payload) => {
-    const timestamp = Date.now();
-    const caisse: CaisseProjet = {
-      id: `caisse-proj-${timestamp}`,
-      nom: payload.nom,
-      description: payload.description,
-      projetId: payload.projetId,
-      montantCollecte: 0,
-      objectif: payload.objectif,
-      statut: 'OUVERTE',
-      visibleAuxMembres: true,
-      dateOuverture: 'Aujourd hui',
-    };
-    set((state) => ({
-      caissesProjet: [caisse, ...state.caissesProjet],
-    }));
-    return caisse;
+  addEvent: async (eventData) => {
+    await postEspace('/api/evenements', eventData);
   },
 
-  closeProjectCaisse: (caisseId: string) => {
-    set((state) => {
-      const caisse = state.caissesProjet.find((c) => c.id === caisseId);
-      return {
-        caissesProjet: state.caissesProjet.map((c) =>
-          c.id === caisseId
-            ? { ...c, statut: 'TERMINEE' as const, dateCloture: 'Aujourd hui' }
-            : c
-        ),
-        projets: state.projets.map((p) =>
-          caisse?.projetId && p.id === caisse.projetId
-            ? { ...p, statut: 'CLOTURE' as const }
-            : p
-        ),
-      };
-    });
+  addCotisation: async (cotisationData) => {
+    await postEspace('/api/cotisations', cotisationData);
   },
 
-  addEvent: (eventData) => {
-    const timestamp = Date.now();
-    const newEvent: Evenement = {
-      ...eventData,
-      id: `ev-${timestamp}`,
-      placesReservees: 0,
-      estInscrit: false,
-    };
-    set((state) => ({
-      evenements: [newEvent, ...state.evenements],
-    }));
+  addUser: async (payload) => {
+    const data = await api.post<{
+      utilisateur: Utilisateur & { motDePasseTemporaire?: string };
+      espace: EspacePayload;
+    }>('/api/utilisateurs', payload);
+    applyEspace(data.espace);
+    return data.utilisateur;
   },
 
-  addCotisation: (cotisationData) => {
-    const timestamp = Date.now();
-    const newCotisation: CotisationStatutaire = {
-      ...cotisationData,
-      id: `cot-${timestamp}`,
-      montantVerse: 0,
-      resteAPayer: cotisationData.montantTotal,
-      statut: 'A_PAYER',
-    };
-    set((state) => ({
-      cotisations: [newCotisation, ...state.cotisations],
-      resume: {
-        ...state.resume,
-        resteAPayer: state.resume.resteAPayer + cotisationData.montantTotal,
-      },
-    }));
+  updateUserRole: async (userId, role) => {
+    await postEspace(`/api/utilisateurs/${userId}/role`, { role });
   },
 
-  recordCashPayment: (payload) => {
-    const timestamp = Date.now();
-    const formattedDate = 'Aujourd hui';
-    const formattedTime = new Date().toLocaleTimeString('fr-FR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-    const receiptNum = `REC-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    const txRef = `TXN-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-
-    const newRecu: Recu = {
-      id: `rec-${timestamp}`,
-      numeroRecu: receiptNum,
-      transactionId: `tx-${timestamp}`,
-      titre: payload.titre,
-      type: payload.type,
-      donateurNom: payload.donateurNom,
-      donateurMatricule: payload.donateurMatricule || 'JCV-MBR-GUICHET',
-      donateurTelephone: payload.donateurTelephone,
-      donateurEmail: 'tresorerie@jcvictoire.org',
-      montant: payload.montant,
-      frais: 0,
-      total: payload.montant,
-      date: formattedDate,
-      heure: formattedTime,
-      statut: 'VALIDE',
-      moyenPaiement: 'ESPECES',
-      egliseNom: ORG_NAME,
-      egliseAdresse: ORG_ADDRESS,
-      codeSecurite: `JCV-SEC-${Math.floor(100000 + Math.random() * 900000)}-ESP`,
+  addFidele: ({ prenom, nom, telephone }) => {
+    const now = new Date();
+    const utilisateur: Utilisateur = {
+      id: `fidele-${now.getTime()}`,
+      prenom: prenom.trim(),
+      nom: nom.trim(),
+      telephone: telephone.trim(),
+      email: '',
+      matricule: `JCV-MBR-${String(now.getTime()).slice(-4)}`,
+      paroisse: 'Église Jésus Christ Victoire',
+      role: 'MEMBRE',
+      dateAdhesion: now.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
     };
-
-    const newTx: Transaction = {
-      id: `tx-${timestamp}`,
-      reference: txRef,
-      titre: payload.titre,
-      type: payload.type,
-      montant: payload.montant,
-      date: formattedDate,
-      heure: formattedTime,
-      statut: 'VALIDE',
-      moyenPaiement: 'ESPECES',
-      recuNumero: receiptNum,
-      donateurNom: payload.donateurNom,
-      donateurTelephone: payload.donateurTelephone,
-    };
-
-    const newMouvement: MouvementCaisse = {
-      id: `mv-${timestamp}`,
-      type: 'ENTREE',
-      montant: payload.montant,
-      motif: `${payload.titre} — ${payload.donateurNom}`,
-      date: formattedDate,
-      heure: formattedTime,
-      source: 'CAISSE_PHYSIQUE',
-      auteur: 'Trésorerie',
-      transactionId: newTx.id,
-    };
-
-    set((state) => ({
-      transactions: [newTx, ...state.transactions],
-      recus: [newRecu, ...state.recus],
-      mouvements: [newMouvement, ...state.mouvements],
-      resume: {
-        ...state.resume,
-        totalContribue: state.resume.totalContribue + payload.montant,
-        derniereContributionDate: formattedDate,
-      },
-      tresorerieGlobale: {
-        ...state.tresorerieGlobale,
-        soldeTotal: state.tresorerieGlobale.soldeTotal + payload.montant,
-        entreesMois: state.tresorerieGlobale.entreesMois + payload.montant,
-        soldeCaissePhysique: state.tresorerieGlobale.soldeCaissePhysique + payload.montant,
-      },
-    }));
-
-    return newRecu;
-  },
-
-  recordWithdrawal: (payload) => {
-    const key = sourceKey(payload.source);
-    const current = get().tresorerieGlobale[key];
-    if (payload.montant <= 0 || payload.montant > current) {
-      return null;
-    }
-
-    const timestamp = Date.now();
-    const formattedDate = 'Aujourd hui';
-    const formattedTime = new Date().toLocaleTimeString('fr-FR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-
-    const mouvement: MouvementCaisse = {
-      id: `mv-${timestamp}`,
-      type: 'SORTIE',
-      montant: payload.montant,
-      motif: payload.motif,
-      date: formattedDate,
-      heure: formattedTime,
-      source: payload.source,
-      auteur: payload.auteur,
-      beneficiaire: payload.beneficiaire,
-    };
-
-    set((state) => ({
-      mouvements: [mouvement, ...state.mouvements],
-      tresorerieGlobale: {
-        ...state.tresorerieGlobale,
-        soldeTotal: state.tresorerieGlobale.soldeTotal - payload.montant,
-        sortiesMois: state.tresorerieGlobale.sortiesMois + payload.montant,
-        [key]: state.tresorerieGlobale[key] - payload.montant,
-      },
-    }));
-
-    return mouvement;
-  },
-
-  addUser: (payload) => {
-    const timestamp = Date.now();
-    const user: Utilisateur = {
-      id: `usr-${timestamp}`,
-      nom: payload.nom.trim(),
-      prenom: payload.prenom.trim(),
-      email: payload.email.trim(),
-      telephone: payload.telephone.trim(),
-      matricule: `JCV-${payload.role === 'TRESORIER' ? 'TRS' : payload.role === 'MEMBRE' ? 'MBR' : 'ADM'}-${Math.floor(1000 + Math.random() * 9000)}`,
-      paroisse: 'Église Jésus Christ Victoire - Abidjan',
-      departement: payload.departement,
-      role: payload.role,
-      dateAdhesion: 'Aujourd hui',
-    };
-    set((state) => ({ utilisateurs: [user, ...state.utilisateurs] }));
-    return user;
-  },
-
-  updateUserRole: (userId, role) => {
-    set((state) => ({
-      utilisateurs: state.utilisateurs.map((u) => (u.id === userId ? { ...u, role } : u)),
-    }));
+    set((state) => ({ utilisateurs: [utilisateur, ...state.utilisateurs] }));
   },
 }));

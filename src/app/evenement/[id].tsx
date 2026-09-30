@@ -55,17 +55,20 @@ export default function EvenementDetailScreen() {
     );
   }
 
-  const handleRegisterFree = () => {
+  const handleRegisterFree = async () => {
     setLoading(true);
-    setTimeout(() => {
-      registerEvent(ev.id);
-      setLoading(false);
+    try {
+      await registerEvent(ev.id);
       Alert.alert(
         'Inscription confirmée !',
         `Vous êtes bien inscrit pour "${ev.titre}". Votre pass d entrée vous attend.`,
         [{ text: 'Super !', onPress: () => router.back() }]
       );
-    }, 600);
+    } catch (error) {
+      Alert.alert('Inscription impossible', error instanceof Error ? error.message : 'Réessayez.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePayEvent = () => {

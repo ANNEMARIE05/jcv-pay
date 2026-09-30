@@ -40,7 +40,7 @@ export default function NouveauProjetScreen() {
     return <Redirect href="/(tabs)/projets" />;
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!titre.trim() || !objectif.trim()) {
       Alert.alert('Champs requis', 'Indiquez le titre et l objectif en FCFA.');
       return;
@@ -51,23 +51,26 @@ export default function NouveauProjetScreen() {
       return;
     }
 
-    addProject({
-      titre: titre.trim(),
-      description: description.trim() || `Collecte pour ${titre.trim()}.`,
-      categorie,
-      objectif: goalNumber,
-      dateFin: dateFin.trim() || '31 Décembre 2026',
-      statut: 'EN_COURS',
-      imageUrl: 'https://images.unsplash.com/photo-1548625361-1959779df303?auto=format&fit=crop&w=800&q=80',
-      organisateur: organisateur.trim() || 'Conseil Pastoral',
-      lieu: 'Sanctuaire Principal',
-    });
-
-    Alert.alert(
-      'Projet publié',
-      'Une caisse liée a été ouverte. Les fidèles le voient dans l onglet Projets.',
-      [{ text: 'OK', onPress: () => router.replace('/(tabs)/projets') }]
-    );
+    try {
+      await addProject({
+        titre: titre.trim(),
+        description: description.trim() || `Collecte pour ${titre.trim()}.`,
+        categorie,
+        objectif: goalNumber,
+        dateFin: dateFin.trim() || '31 Décembre 2026',
+        statut: 'EN_COURS',
+        imageUrl: 'https://images.unsplash.com/photo-1548625361-1959779df303?auto=format&fit=crop&w=800&q=80',
+        organisateur: organisateur.trim() || 'Conseil Pastoral',
+        lieu: 'Sanctuaire Principal',
+      });
+      Alert.alert(
+        'Projet publié',
+        'Une caisse liée a été ouverte. Les fidèles le voient dans l onglet Projets.',
+        [{ text: 'OK', onPress: () => router.replace('/(tabs)/projets') }]
+      );
+    } catch (error) {
+      Alert.alert('Projet non créé', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
   return (

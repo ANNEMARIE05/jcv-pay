@@ -1,3 +1,5 @@
+'use no memo';
+
 import React from 'react';
 import { StyleProp, ViewStyle } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';

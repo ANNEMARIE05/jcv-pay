@@ -1,3 +1,5 @@
+'use no memo';
+
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -24,7 +26,7 @@ import { scrollInputIntoView } from '@/utils/scrollInputIntoView';
 import { ProgressBar } from '@/components/common/ProgressBar';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
-import { DISPLAY_PREF_ITEMS, useDisplayPrefsStore } from '@/store/displayPrefsStore';
+import { CaisseDesk } from '@/components/finance/CaisseDesk';
 import { ASSIGNABLE_ROLES, ROLE_LABELS, canManageCampaigns, canManageMoney, canManagePeople } from '@/constants/roles';
 import { RoleUtilisateur, SourceCaisse } from '@/types';
 
@@ -37,7 +39,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
     : Math.max(insets.bottom, 16) + 8;
 
   const user = useAuthStore((s) => s.user);
-  const switchRole = useAuthStore((s) => s.switchRole);
 
   const tresorerie = useFinanceStore((s) => s.tresorerieGlobale);
   const transactions = useFinanceStore((s) => s.transactions);
@@ -45,7 +46,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const evenements = useFinanceStore((s) => s.evenements);
   const cotisations = useFinanceStore((s) => s.cotisations);
   const caissesProjet = useFinanceStore((s) => s.caissesProjet);
-  const closeProjectCaisse = useFinanceStore((s) => s.closeProjectCaisse);
 
   const validatePayment = useFinanceStore((s) => s.validatePayment);
   const rejectPayment = useFinanceStore((s) => s.rejectPayment);
@@ -58,7 +58,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const utilisateurs = useFinanceStore((s) => s.utilisateurs);
   const addUser = useFinanceStore((s) => s.addUser);
   const updateUserRole = useFinanceStore((s) => s.updateUserRole);
-  const prefs = useDisplayPrefsStore();
   const money = canManageMoney(user?.role);
   const people = canManagePeople(user?.role);
   const campaigns = canManageCampaigns(user?.role);
@@ -76,7 +75,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const [showCashModal, setShowCashModal] = useState(false);
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [showUserModal, setShowUserModal] = useState(false);
-  const [showPrefsModal, setShowPrefsModal] = useState(false);
   const [roleUserId, setRoleUserId] = useState<string | null>(null);
 
   // New Project Form State
@@ -131,12 +129,16 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Oui, Valider',
-          onPress: () => {
-            validatePayment(txId);
-            Alert.alert(
-              'Encaissement Validé !',
-              `Le versement a été crédité. Le billet/reçu officiel de ${donateur} est maintenant téléchargeable.`
-            );
+          onPress: async () => {
+            try {
+              await validatePayment(txId);
+              Alert.alert(
+                'Encaissement Validé !',
+                `Le versement a été crédité. Le billet/reçu officiel de ${donateur} est maintenant téléchargeable.`
+              );
+            } catch (error) {
+              Alert.alert('Validation impossible', error instanceof Error ? error.message : 'Réessayez.');
+            }
           },
         },
       ]
@@ -152,9 +154,13 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
         {
           text: 'Rejeter',
           style: 'destructive',
-          onPress: () => {
-            rejectPayment(txId);
-            Alert.alert('Paiement rejeté', 'Le statut a été mis à jour.');
+          onPress: async () => {
+            try {
+              await rejectPayment(txId);
+              Alert.alert('Paiement rejeté', 'Le statut a été mis à jour.');
+            } catch (error) {
+              Alert.alert('Rejet impossible', error instanceof Error ? error.message : 'Réessayez.');
+            }
           },
         },
       ]
@@ -162,34 +168,37 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   };
 
   // Submit Project
-  const handleCreateProject = () => {
+  const handleCreateProject = async () => {
     if (!newProjTitle.trim() || !newProjGoal.trim()) {
       Alert.alert('Erreur', 'Veuillez saisir au minimum le titre et le montant cible en FCFA.');
       return;
     }
     const goalNumber = parseInt(newProjGoal.replace(/\D/g, ''), 10) || 5000000;
-    addProject({
-      titre: newProjTitle.trim(),
-      description: newProjDesc.trim() || 'Projet pour l expansion du Royaume et de l Église.',
-      categorie: newProjCategory,
-      objectif: goalNumber,
-      dateFin: newProjDateFin,
-      statut: 'EN_COURS',
-      imageUrl: 'https://images.unsplash.com/photo-1548625361-1959779df303?auto=format&fit=crop&w=800&q=80',
-      organisateur: newProjOrganizer,
-      lieu: 'Sanctuaire Principal',
-    });
-
-    setShowProjectModal(false);
-    setNewProjTitle('');
-    setNewProjGoal('');
-    setNewProjDesc('');
-    setActiveTab('PROJETS');
-    Alert.alert('Projet créé avec succès !', 'Le projet est désormais visible par tous les fidèles sur l application.');
+    try {
+      await addProject({
+        titre: newProjTitle.trim(),
+        description: newProjDesc.trim() || 'Projet pour l expansion du Royaume et de l Église.',
+        categorie: newProjCategory,
+        objectif: goalNumber,
+        dateFin: newProjDateFin,
+        statut: 'EN_COURS',
+        imageUrl: 'https://images.unsplash.com/photo-1548625361-1959779df303?auto=format&fit=crop&w=800&q=80',
+        organisateur: newProjOrganizer,
+        lieu: 'Sanctuaire Principal',
+      });
+      setShowProjectModal(false);
+      setNewProjTitle('');
+      setNewProjGoal('');
+      setNewProjDesc('');
+      setActiveTab('PROJETS');
+      Alert.alert('Projet créé avec succès !', 'Le projet est désormais visible par tous les fidèles sur l application.');
+    } catch (error) {
+      Alert.alert('Projet non créé', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
   // Submit Event
-  const handleCreateEvent = () => {
+  const handleCreateEvent = async () => {
     if (!newEventTitle.trim()) {
       Alert.alert('Erreur', 'Veuillez renseigner le titre du séminaire ou de la conférence.');
       return;
@@ -197,106 +206,118 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
     const priceNum = parseInt(newEventPrice.replace(/\D/g, ''), 10) || 0;
     const seatsNum = parseInt(newEventSeats.replace(/\D/g, ''), 10) || 200;
 
-    addEvent({
-      titre: newEventTitle.trim(),
-      description: newEventDesc.trim() || 'Rassemblement spirituel sous la direction du Pasteur Samuel.',
-      date: newEventDate,
-      heure: newEventTime,
-      lieu: newEventPlace,
-      tarif: priceNum,
-      placesDisponibles: seatsNum,
-      imageUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80',
-      intervenant: newEventSpeaker || 'Pasteur Samuel',
-    });
-
-    setShowEventModal(false);
-    setNewEventTitle('');
-    setNewEventDesc('');
-    setActiveTab('EVENEMENTS');
-    Alert.alert('Événement programmé !', 'Les fidèles peuvent dès maintenant s inscrire et réserver leurs pass.');
+    try {
+      await addEvent({
+        titre: newEventTitle.trim(),
+        description: newEventDesc.trim() || 'Rassemblement spirituel sous la direction du Pasteur Samuel.',
+        date: newEventDate,
+        heure: newEventTime,
+        lieu: newEventPlace,
+        tarif: priceNum,
+        placesDisponibles: seatsNum,
+        imageUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80',
+        intervenant: newEventSpeaker || 'Pasteur Samuel',
+      });
+      setShowEventModal(false);
+      setNewEventTitle('');
+      setNewEventDesc('');
+      setActiveTab('EVENEMENTS');
+      Alert.alert('Événement programmé !', 'Les fidèles peuvent dès maintenant s inscrire et réserver leurs pass.');
+    } catch (error) {
+      Alert.alert('Événement non créé', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
   // Submit Cotisation
-  const handleCreateCotisation = () => {
+  const handleCreateCotisation = async () => {
     if (!newCotisTitle.trim() || !newCotisAmount.trim()) {
       Alert.alert('Erreur', 'Veuillez saisir le titre et le montant par membre.');
       return;
     }
     const amtNum = parseInt(newCotisAmount.replace(/\D/g, ''), 10) || 25000;
 
-    addCotisation({
-      titre: newCotisTitle.trim(),
-      categorie: newCotisCategory,
-      montantTotal: amtNum,
-      echeance: newCotisDeadline,
-    });
-
-    setShowCotisationModal(false);
-    setNewCotisTitle('');
-    setActiveTab('COTISATIONS');
-    Alert.alert('Campagne de cotisation créée !', 'Elle est active et accessible dans la section Cotisations.');
+    try {
+      await addCotisation({
+        titre: newCotisTitle.trim(),
+        categorie: newCotisCategory,
+        montantTotal: amtNum,
+        echeance: newCotisDeadline,
+      });
+      setShowCotisationModal(false);
+      setNewCotisTitle('');
+      setActiveTab('COTISATIONS');
+      Alert.alert('Campagne de cotisation créée !', 'Elle est active et accessible dans la section Cotisations.');
+    } catch (error) {
+      Alert.alert('Cotisation non créée', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
   // Submit Cash
-  const handleCreateCashPayment = () => {
+  const handleCreateCashPayment = async () => {
     if (!cashDonorName.trim() || !cashAmount.trim()) {
       Alert.alert('Erreur', 'Veuillez saisir le nom du fidèle et le montant en espèces.');
       return;
     }
     const amtNum = parseInt(cashAmount.replace(/\D/g, ''), 10) || 10000;
 
-    const recu = recordCashPayment({
-      donateurNom: cashDonorName.trim(),
-      donateurTelephone: cashDonorPhone.trim() || '+225 07 00 00 00 00',
-      montant: amtNum,
-      type: cashType,
-      titre: cashTitle || `${cashType} reçue au secrétariat`,
-    });
-
-    setShowCashModal(false);
-    setCashDonorName('');
-    setCashAmount('');
-
-    Alert.alert(
-      'Encaissement Espèces Enregistré !',
-      `Reçu officiel N° ${recu.numeroRecu} émis avec succès pour ${cashDonorName}.\nLa caisse physique a été créditée de ${amtNum.toLocaleString('fr-FR')} FCFA.`,
-      [
-        { text: 'Fermer' },
-        { text: 'Voir le Billet', onPress: () => router.push(`/recu/${recu.id}`) },
-      ]
-    );
+    try {
+      const recu = await recordCashPayment({
+        donateurNom: cashDonorName.trim(),
+        donateurTelephone: cashDonorPhone.trim() || '+225 07 00 00 00 00',
+        montant: amtNum,
+        type: cashType,
+        titre: cashTitle || `${cashType} reçue au secrétariat`,
+      });
+      setShowCashModal(false);
+      setCashDonorName('');
+      setCashAmount('');
+      Alert.alert(
+        'Encaissement Espèces Enregistré !',
+        `Reçu officiel N° ${recu.numeroRecu} émis avec succès pour ${cashDonorName}.\nLa caisse physique a été créditée de ${amtNum.toLocaleString('fr-FR')} FCFA.`,
+        [
+          { text: 'Fermer' },
+          { text: 'Voir le Billet', onPress: () => router.push(`/recu/${recu.id}`) },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Encaissement impossible', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
-  const handleCreateUser = () => {
-    if (!newUserPrenom.trim() || !newUserNom.trim() || !newUserEmail.trim()) {
-      Alert.alert('Champs requis', 'Saisissez le prénom, le nom et l email.');
+  const handleCreateUser = async () => {
+    if (!newUserPrenom.trim() || !newUserNom.trim() || !newUserPhone.trim()) {
+      Alert.alert('Champs requis', 'Saisissez le prénom, le nom et le numéro de téléphone.');
       return;
     }
-    const created = addUser({
-      prenom: newUserPrenom,
-      nom: newUserNom,
-      email: newUserEmail,
-      telephone: newUserPhone.trim() || '+225 07 00 00 00 00',
-      role: newUserRole,
-    });
-    setShowUserModal(false);
-    setNewUserPrenom('');
-    setNewUserNom('');
-    setNewUserEmail('');
-    setNewUserPhone('+225 ');
-    setNewUserRole('MEMBRE');
-    setActiveTab('MEMBRES');
-    Alert.alert(
-      'Compte créé',
-      `${created.prenom} ${created.nom} peut se connecter avec ${created.email}. Rôle : ${ROLE_LABELS[created.role]}.`
-    );
+    try {
+      const created = await addUser({
+        prenom: newUserPrenom,
+        nom: newUserNom,
+        email: newUserEmail,
+        telephone: newUserPhone.trim(),
+        role: newUserRole,
+      });
+      setShowUserModal(false);
+      setNewUserPrenom('');
+      setNewUserNom('');
+      setNewUserEmail('');
+      setNewUserPhone('+225 ');
+      setNewUserRole('MEMBRE');
+      setActiveTab('MEMBRES');
+      Alert.alert(
+        'Compte créé',
+        `${created.prenom} ${created.nom} se connecte avec le numéro ${created.telephone} et le mot de passe temporaire ${created.motDePasseTemporaire}.`
+      );
+    } catch (error) {
+      Alert.alert('Compte non créé', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
   const handleChangeRole = (userId: string) => {
     setRoleUserId(userId);
   };
 
-  const handleWithdraw = () => {
+  const handleWithdraw = async () => {
     if (!withdrawMotif.trim() || !withdrawAmount.trim()) {
       Alert.alert('Champs obligatoires', 'Indiquez le montant et le motif du retrait.');
       return;
@@ -306,22 +327,26 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
       Alert.alert('Montant invalide', 'Saisissez une somme positive.');
       return;
     }
-    const result = recordWithdrawal({
-      montant: amt,
-      motif: withdrawMotif.trim(),
-      source: withdrawSource,
-      auteur: user ? `${user.prenom} ${user.nom}`.trim() : 'Trésorier',
-      beneficiaire: withdrawBeneficiaire.trim() || undefined,
-    });
-    if (!result) {
-      Alert.alert('Solde insuffisant', 'Ce montant dépasse le solde de cette caisse.');
-      return;
+    try {
+      const result = await recordWithdrawal({
+        montant: amt,
+        motif: withdrawMotif.trim(),
+        source: withdrawSource,
+        auteur: user ? `${user.prenom} ${user.nom}`.trim() : 'Trésorier',
+        beneficiaire: withdrawBeneficiaire.trim() || undefined,
+      });
+      if (!result) {
+        Alert.alert('Solde insuffisant', 'Ce montant dépasse le solde de cette caisse.');
+        return;
+      }
+      setShowWithdrawModal(false);
+      setWithdrawAmount('');
+      setWithdrawMotif('');
+      setWithdrawBeneficiaire('');
+      Alert.alert('Sortie enregistrée', `${amt.toLocaleString('fr-FR')} FCFA ont été retirés de la caisse.`);
+    } catch (error) {
+      Alert.alert('Retrait impossible', error instanceof Error ? error.message : 'Réessayez.');
     }
-    setShowWithdrawModal(false);
-    setWithdrawAmount('');
-    setWithdrawMotif('');
-    setWithdrawBeneficiaire('');
-    Alert.alert('Sortie enregistrée', `${amt.toLocaleString('fr-FR')} FCFA ont été retirés de la caisse.`);
   };
 
   return (
@@ -330,10 +355,10 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
         title={embedded ? (money ? 'Caisse' : 'Gestion') : 'Espace Administration'}
         subtitle={
           money && people
-            ? 'Comptes, projets, caisses et argent'
+            ? 'Comptes, caisses et versements'
             : money
-              ? 'Confirmez l argent, ouvrez les caisses et les projets'
-              : 'Créez les comptes, projets, caisses et campagnes'
+              ? 'Confirmez les versements et tenez les caisses'
+              : 'Comptes, projets et caisses'
         }
         showBack={!embedded}
         onBack={() => {
@@ -341,26 +366,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
           else router.replace('/(tabs)');
         }}
         variant="curved"
-        rightAction={
-          <View style={styles.headerActions}>
-            {embedded ? (
-              <TouchableOpacity
-                style={styles.switchRoleHeaderBtn}
-                onPress={() => switchRole()}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="swap-horizontal" size={16} color={AppColors.white} />
-              </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity
-              style={styles.switchRoleHeaderBtn}
-              onPress={() => setShowPrefsModal(true)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="options-outline" size={18} color={AppColors.white} />
-            </TouchableOpacity>
-          </View>
-        }
       />
 
       <ScrollView
@@ -390,15 +395,15 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
 
             <Text style={styles.adminHowTo}>
               {money && people
-                ? 'Vous gérez les comptes, les campagnes et l argent : projets, caisses, validations et sorties.'
+                ? 'Trois gestes : un compte, une caisse, une confirmation. L’argent reste dans la caisse principale.'
                 : money
-                  ? 'Le fidèle verse hors de l appli. Vous confirmez ici, ouvrez les caisses et les projets, et notez les sorties.'
-                  : 'Vous créez les comptes, les projets et les caisses. Le trésorier confirme l argent reçu.'}
+                  ? 'Confirmez ce qui est vraiment arrivé. L’argent va dans la caisse principale.'
+                  : 'Vous voyez la caisse et le total récolté. Le trésorier confirme l’argent.'}
             </Text>
           </Card>
         </View>
 
-        {money && prefs.adminSolde ? (
+        {money ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Argent disponible</Text>
           <Text style={styles.sectionSubtitle}>Caisse Wave, Orange Money, banque et espèces</Text>
@@ -409,7 +414,19 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
               <Text style={styles.statBoxBigValue}>
                 {tresorerie.soldeTotal.toLocaleString('fr-FR')} FCFA
               </Text>
-              <Text style={styles.statBoxHint}>Cumul banques, caisses mobiles & espèces</Text>
+              <Text style={styles.statBoxHint}>Cumul banques, caisses mobiles et espèces</Text>
+            </Card>
+
+            <Card style={styles.totalCard}>
+              <Text style={styles.statMiniLabel}>Total récolté</Text>
+              <Text style={styles.statValueGreen}>
+                {transactions
+                  .filter((t) => t.statut === 'VALIDE')
+                  .reduce((sum, t) => sum + t.montant, 0)
+                  .toLocaleString('fr-FR')}{' '}
+                FCFA
+              </Text>
+              <Text style={styles.statMiniSub}>Somme enregistrée sur l’application</Text>
             </Card>
 
             <View style={styles.twoColsRow}>
@@ -463,27 +480,34 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
 
         {!money && people ? (
           <View style={styles.section}>
-            <Card style={styles.pendingHintCard}>
-              <Ionicons name="time-outline" size={20} color={AppColors.accent} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.pendingHintTitle}>
-                  {pendingPayments.length === 0
-                    ? 'Aucun versement en attente'
-                    : `${pendingPayments.length} versement${pendingPayments.length > 1 ? 's' : ''} chez le trésorier`}
-                </Text>
-                <Text style={styles.pendingHintSub}>
-                  Seul le trésorier confirme l argent et tient la caisse.
-                </Text>
-              </View>
+            <Text style={styles.sectionTitle}>L’argent de l’église</Text>
+            <Text style={styles.sectionSubtitle}>Ce qui est dans la caisse, et tout ce qui a été récolté</Text>
+            <Card style={styles.statBoxPrimary}>
+              <Text style={styles.statBoxLabel}>DANS LA CAISSE</Text>
+              <Text style={styles.statBoxBigValue}>
+                {tresorerie.soldeTotal.toLocaleString('fr-FR')} FCFA
+              </Text>
+              <Text style={styles.statBoxHint}>Caisse principale, disponible maintenant</Text>
+            </Card>
+            <Card style={styles.totalCard}>
+              <Text style={styles.statMiniLabel}>Total récolté</Text>
+              <Text style={styles.statValueGreen}>
+                {transactions
+                  .filter((t) => t.statut === 'VALIDE')
+                  .reduce((sum, t) => sum + t.montant, 0)
+                  .toLocaleString('fr-FR')}{' '}
+                FCFA
+              </Text>
+              <Text style={styles.statMiniSub}>Somme enregistrée sur l’application</Text>
             </Card>
           </View>
         ) : null}
 
-        {prefs.adminQuickActions && (people || money) ? (
+        {(people || money) ? (
         <View style={styles.quickActionsContainer}>
-          <Text style={styles.sectionTitle}>Actions</Text>
+          <Text style={styles.sectionTitle}>Que faire ?</Text>
           <Text style={styles.sectionSubtitle}>
-            Créer un projet, une caisse, un compte, ou ouvrir la trésorerie.
+            Un compte, un projet, une caisse. Le reste est dans les onglets.
           </Text>
 
           <View style={styles.actionButtonsGrid}>
@@ -511,21 +535,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                 <Ionicons name="wallet-outline" size={22} color="#D97706" />
               </View>
               <Text style={styles.actionBtnTitle}>Nouvelle caisse</Text>
-              <Text style={styles.actionBtnDesc}>Ouvrir une collecte</Text>
-            </TouchableOpacity>
-            ) : null}
-
-            {campaigns ? (
-            <TouchableOpacity
-              style={styles.actionGridBtn}
-              onPress={() => router.push('/evenement/nouveau')}
-              activeOpacity={0.85}
-            >
-              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#EDE9FE' }]}>
-                <Ionicons name="calendar-outline" size={22} color="#7C3AED" />
-              </View>
-              <Text style={styles.actionBtnTitle}>Nouvel événement</Text>
-              <Text style={styles.actionBtnDesc}>Séminaire ou conférence</Text>
+              <Text style={styles.actionBtnDesc}>En plus de la principale</Text>
             </TouchableOpacity>
             ) : null}
 
@@ -551,8 +561,8 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
               <View style={[styles.actionBtnIconCircle, { backgroundColor: '#E0F2FE' }]}>
                 <Ionicons name="people-outline" size={22} color="#0284C7" />
               </View>
-              <Text style={styles.actionBtnTitle}>Tous les payeurs</Text>
-              <Text style={styles.actionBtnDesc}>Qui a payé, sans exception</Text>
+              <Text style={styles.actionBtnTitle}>Les fidèles</Text>
+              <Text style={styles.actionBtnDesc}>Annuaire de l’assemblée</Text>
             </TouchableOpacity>
 
             {money ? (
@@ -579,7 +589,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                 <Ionicons name="stats-chart-outline" size={22} color={AppColors.accent} />
               </View>
               <Text style={styles.actionBtnTitle}>Trésorerie complète</Text>
-              <Text style={styles.actionBtnDesc}>Caisses, journal, payeurs</Text>
+              <Text style={styles.actionBtnDesc}>Caisses et journal</Text>
             </TouchableOpacity>
             ) : people ? (
             <TouchableOpacity
@@ -598,16 +608,16 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
         </View>
         ) : null}
 
-        {(() => {
+        {!embedded && (() => {
           const tabs = ([
-              money && prefs.adminValidations
+              money
                 ? { id: 'VALIDATIONS' as const, label: 'À confirmer', count: pendingPayments.length }
                 : null,
-              campaigns && prefs.adminCampagnes ? { id: 'PROJETS' as const, label: `Projets (${projets.length})` } : null,
-              campaigns && prefs.adminCampagnes ? { id: 'CAISSES' as const, label: `Caisses (${caissesProjet.length})` } : null,
-              campaigns && prefs.adminCampagnes ? { id: 'EVENEMENTS' as const, label: `Événements (${evenements.length})` } : null,
-              campaigns && prefs.adminCampagnes ? { id: 'COTISATIONS' as const, label: `Cotisations (${cotisations.length})` } : null,
-              people && prefs.adminMembres ? { id: 'MEMBRES' as const, label: `Comptes (${utilisateurs.length})` } : null,
+              campaigns ? { id: 'CAISSES' as const, label: 'Caisses', count: caissesProjet.length } : null,
+              people ? { id: 'MEMBRES' as const, label: 'Comptes', count: utilisateurs.length } : null,
+              campaigns ? { id: 'PROJETS' as const, label: 'Projets', count: projets.length } : null,
+              campaigns ? { id: 'EVENEMENTS' as const, label: 'Événements', count: evenements.length } : null,
+              campaigns ? { id: 'COTISATIONS' as const, label: 'Cotisations', count: cotisations.length } : null,
             ].filter(Boolean) as { id: AdminTab; label: string; count?: number }[]);
           if (tabs.length === 0) return null;
           if (tabs.length === 1) return null;
@@ -639,7 +649,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
           );
         })()}
 
-        {money && activeTab === 'VALIDATIONS' && (
+        {!embedded && money && activeTab === 'VALIDATIONS' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
@@ -715,7 +725,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
         )}
 
         {/* TAB 2: GESTION DES PROJETS */}
-        {campaigns && activeTab === 'PROJETS' && (
+        {!embedded && campaigns && activeTab === 'PROJETS' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Projets & Travaux du Temple</Text>
@@ -779,86 +789,23 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
           </View>
         )}
 
-        {campaigns && activeTab === 'CAISSES' && (
+        {!embedded && campaigns && activeTab === 'CAISSES' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>Caisses de collecte</Text>
+              <Text style={styles.sectionTitle}>Les caisses</Text>
               <TouchableOpacity onPress={() => router.push('/caisse/nouvelle')}>
                 <Text style={styles.linkText}>+ Nouvelle caisse</Text>
               </TouchableOpacity>
             </View>
-            <View style={styles.cardsList}>
-              {caissesProjet.length === 0 ? (
-                <Card style={styles.emptyCard}>
-                  <Ionicons name="wallet-outline" size={42} color={AppColors.textMuted} />
-                  <Text style={styles.emptyTitle}>Aucune caisse</Text>
-                  <Text style={styles.emptySub}>
-                    Ouvrez une caisse autonome, ou créez un projet : une caisse liée est ouverte automatiquement.
-                  </Text>
-                  <TouchableOpacity onPress={() => router.push('/caisse/nouvelle')} style={{ marginTop: 12 }}>
-                    <Text style={styles.linkText}>Ouvrir une caisse</Text>
-                  </TouchableOpacity>
-                </Card>
-              ) : (
-                caissesProjet.map((c) => {
-                  const percent = c.objectif
-                    ? Math.min(Math.round((c.montantCollecte / c.objectif) * 100), 100)
-                    : 0;
-                  return (
-                    <Card key={c.id} style={styles.projectManageCard} variant="elevated">
-                      <View style={styles.projectManageHeader}>
-                        <View style={styles.catBadge}>
-                          <Text style={styles.catBadgeText}>Caisse</Text>
-                        </View>
-                        <Badge
-                          label={c.statut === 'OUVERTE' ? 'Ouverte' : 'Terminée'}
-                          variant={c.statut === 'OUVERTE' ? 'success' : 'neutral'}
-                          size="sm"
-                        />
-                      </View>
-                      <Text style={styles.itemTitle}>{c.nom}</Text>
-                      <Text style={styles.itemSub}>{c.description}</Text>
-                      <View style={styles.progressBox}>
-                        <ProgressBar progress={percent / 100} height={7} />
-                        <View style={styles.progressLabels}>
-                          <Text style={styles.progressCollected}>
-                            {c.montantCollecte.toLocaleString('fr-FR')} FCFA
-                          </Text>
-                          <Text style={styles.progressGoal}>
-                            Cible : {c.objectif.toLocaleString('fr-FR')} FCFA
-                          </Text>
-                        </View>
-                      </View>
-                      {c.statut === 'OUVERTE' ? (
-                        <TouchableOpacity
-                          style={styles.btnSmall}
-                          onPress={() => {
-                            Alert.alert(
-                              'Clôturer cette caisse ?',
-                              `Marquer « ${c.nom} » comme terminée ? Le projet lié sera aussi clôturé.`,
-                              [
-                                { text: 'Annuler', style: 'cancel' },
-                                {
-                                  text: 'Oui, c est terminé',
-                                  onPress: () => closeProjectCaisse(c.id),
-                                },
-                              ]
-                            );
-                          }}
-                        >
-                          <Text style={styles.btnSmallText}>Marquer terminée</Text>
-                        </TouchableOpacity>
-                      ) : null}
-                    </Card>
-                  );
-                })
-              )}
-            </View>
+            <Text style={styles.sectionSubtitle}>
+              La principale reçoit l’argent. Les autres servent à un projet : on y transfère, ou on les supprime.
+            </Text>
+            <CaisseDesk />
           </View>
         )}
 
         {/* TAB 3: GESTION DES ÉVÉNEMENTS */}
-        {campaigns && activeTab === 'EVENEMENTS' && (
+        {!embedded && campaigns && activeTab === 'EVENEMENTS' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Séminaires, Retraites & Conférences</Text>
@@ -913,7 +860,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
         )}
 
         {/* TAB 4: GESTION DES COTISATIONS */}
-        {campaigns && activeTab === 'COTISATIONS' && (
+        {!embedded && campaigns && activeTab === 'COTISATIONS' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Campagnes de Cotisations</Text>
@@ -940,7 +887,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
           </View>
         )}
 
-        {people && activeTab === 'MEMBRES' && (
+        {!embedded && people && activeTab === 'MEMBRES' && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Comptes et rôles</Text>
@@ -949,7 +896,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
               </TouchableOpacity>
             </View>
             <Text style={styles.sectionSubtitle}>
-              Touchez un rôle pour le changer. Un fidèle déclare. Un trésorier confirme. Un admin crée les comptes.
+              Le rôle indique ce que la personne peut faire. Pour passer sur un autre compte, déconnectez-vous.
             </Text>
 
             <View style={styles.caissesList}>
@@ -1492,55 +1439,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={showPrefsModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <View>
-                <Text style={styles.modalHeaderTitle}>Éléments affichés</Text>
-                <Text style={styles.modalHeaderSub}>Masquez ce qui ne sert pas au quotidien</Text>
-              </View>
-              <TouchableOpacity onPress={() => setShowPrefsModal(false)}>
-                <Ionicons name="close-circle" size={26} color={AppColors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.modalBody}>
-              {DISPLAY_PREF_ITEMS.filter((item) => {
-                if (item.key === 'adminSolde' || item.key === 'adminValidations') return money;
-                if (item.key === 'adminMembres' || item.key === 'adminCampagnes') return people;
-                return money || people;
-              }).map((item) => {
-                const on = prefs[item.key];
-                return (
-                  <TouchableOpacity
-                    key={item.key}
-                    style={styles.prefRow}
-                    onPress={() => prefs.toggle(item.key)}
-                    activeOpacity={0.8}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.prefArea}>{item.area}</Text>
-                      <Text style={styles.prefTitle}>{item.title}</Text>
-                      <Text style={styles.prefHint}>{item.hint}</Text>
-                    </View>
-                    <View style={[styles.prefSwitch, on && styles.prefSwitchOn]}>
-                      <Text style={styles.prefSwitchText}>{on ? 'ON' : 'OFF'}</Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-              <Button
-                title="Fermer"
-                onPress={() => setShowPrefsModal(false)}
-                variant="outline"
-                size="lg"
-                style={{ marginTop: 8, marginBottom: 20 }}
-              />
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
       <Modal visible={!!roleUserId} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContainer, { maxHeight: '70%' }]}>
@@ -1564,7 +1462,11 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                   key={r.id}
                   style={styles.rolePick}
                   onPress={() => {
-                    if (roleUserId) updateUserRole(roleUserId, r.id);
+                    if (roleUserId) {
+                      updateUserRole(roleUserId, r.id).catch((error) =>
+                        Alert.alert('Rôle non modifié', error instanceof Error ? error.message : 'Réessayez.')
+                      );
+                    }
                     setRoleUserId(null);
                   }}
                 >
@@ -1758,6 +1660,11 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 14,
     borderRadius: 18,
+  },
+  totalCard: {
+    padding: 14,
+    borderRadius: 18,
+    marginTop: 12,
   },
   statMiniLabel: {
     fontSize: 11,

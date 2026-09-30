@@ -34,29 +34,32 @@ export default function NouvelEvenementScreen() {
     return <Redirect href="/(tabs)/projets" />;
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!titre.trim()) {
       Alert.alert('Titre requis', 'Indiquez le nom de l événement.');
       return;
     }
 
-    addEvent({
-      titre: titre.trim(),
-      description: description.trim() || 'Rassemblement de l Église.',
-      date: date.trim() || 'À confirmer',
-      heure: heure.trim() || '09h00',
-      lieu: lieu.trim() || 'Temple',
-      tarif: parseInt(tarif.replace(/\D/g, ''), 10) || 0,
-      placesDisponibles: parseInt(places.replace(/\D/g, ''), 10) || 200,
-      imageUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80',
-      intervenant: intervenant.trim() || 'Pasteur Samuel',
-    });
-
-    Alert.alert(
-      'Événement programmé',
-      'Les fidèles peuvent s inscrire depuis l onglet Événements.',
-      [{ text: 'OK', onPress: () => router.replace('/(tabs)/projets') }]
-    );
+    try {
+      await addEvent({
+        titre: titre.trim(),
+        description: description.trim() || 'Rassemblement de l Église.',
+        date: date.trim() || 'À confirmer',
+        heure: heure.trim() || '09h00',
+        lieu: lieu.trim() || 'Temple',
+        tarif: parseInt(tarif.replace(/\D/g, ''), 10) || 0,
+        placesDisponibles: parseInt(places.replace(/\D/g, ''), 10) || 200,
+        imageUrl: 'https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=800&q=80',
+        intervenant: intervenant.trim() || 'Pasteur Samuel',
+      });
+      Alert.alert(
+        'Événement programmé',
+        'Les fidèles peuvent s inscrire depuis l onglet Événements.',
+        [{ text: 'OK', onPress: () => router.replace('/(tabs)/projets') }]
+      );
+    } catch (error) {
+      Alert.alert('Événement non créé', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
   return (

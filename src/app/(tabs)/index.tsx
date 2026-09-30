@@ -1,3 +1,5 @@
+'use no memo';
+
 import React from 'react';
 import {
   View,
@@ -29,7 +31,6 @@ export default function HomeScreen() {
     : Math.max(insets.top, StatusBar.currentHeight || 24);
 
   const user = useAuthStore((s) => s.user);
-  const switchRole = useAuthStore((s) => s.switchRole);
   const isAdmin = isStaff(user?.role);
 
   const unreadCount = useNotificationStore((s) => s.unreadCount);
@@ -38,13 +39,9 @@ export default function HomeScreen() {
   );
   const resume = useFinanceStore((s) => s.resume);
   const recus = useFinanceStore((s) => s.recus);
-  const projets = useFinanceStore((s) => s.projets);
-  const evenements = useFinanceStore((s) => s.evenements);
 
   const ready = useScreenReady(720);
   const recusCount = recus.length;
-  const projetsActifs = projets.filter((p) => p.statut === 'EN_COURS').slice(0, 2);
-  const prochainsEvenements = evenements.slice(0, 2);
 
   if (isAdmin) {
     return <AdminDashboard embedded />;
@@ -88,23 +85,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerRightActions}>
-            {/* Sélecteur rapide de rôle (Fidèle / Admin) */}
-            <TouchableOpacity
-              style={styles.roleSwitchPill}
-              onPress={() => switchRole()}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name={isAdmin ? 'shield-checkmark' : 'person-outline'}
-                size={12}
-                color={AppColors.accent}
-              />
-              <Text style={styles.roleSwitchText}>
-                {isAdmin ? 'Admin' : 'Fidèle'}
-              </Text>
-              <Ionicons name="swap-horizontal" size={11} color="rgba(255,255,255,0.7)" />
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={styles.notifBtn}
               onPress={() => router.push('/notifications')}
@@ -181,56 +161,6 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </View>
-
-          <Text style={styles.blockTitle}>Projets en cours</Text>
-          {projetsActifs.length === 0 ? (
-            <Card style={styles.emptyBlock}>
-              <Text style={styles.emptyBlockText}>Aucun projet ouvert pour le moment.</Text>
-              <TouchableOpacity onPress={() => router.push('/(tabs)/projets')}>
-                <Text style={styles.emptyLink}>Voir les projets</Text>
-              </TouchableOpacity>
-            </Card>
-          ) : (
-            projetsActifs.map((p) => (
-              <TouchableOpacity
-                key={p.id}
-                onPress={() => router.push(`/projet/${p.id}`)}
-                activeOpacity={0.85}
-              >
-                <Card style={styles.listCard} variant="elevated">
-                  <Text style={styles.listCardTitle}>{p.titre}</Text>
-                  <Text style={styles.listCardMeta}>
-                    {p.montantCollecte.toLocaleString('fr-FR')} / {p.objectif.toLocaleString('fr-FR')} FCFA
-                  </Text>
-                </Card>
-              </TouchableOpacity>
-            ))
-          )}
-
-          <Text style={styles.blockTitle}>Événements</Text>
-          {prochainsEvenements.length === 0 ? (
-            <Card style={styles.emptyBlock}>
-              <Text style={styles.emptyBlockText}>Aucun événement programmé.</Text>
-              <TouchableOpacity onPress={() => router.push('/calendrier')}>
-                <Text style={styles.emptyLink}>Ouvrir le calendrier</Text>
-              </TouchableOpacity>
-            </Card>
-          ) : (
-            prochainsEvenements.map((ev) => (
-              <TouchableOpacity
-                key={ev.id}
-                onPress={() => router.push(`/evenement/${ev.id}`)}
-                activeOpacity={0.85}
-              >
-                <Card style={styles.listCard} variant="elevated">
-                  <Text style={styles.listCardTitle}>{ev.titre}</Text>
-                  <Text style={styles.listCardMeta}>
-                    {ev.date} • {ev.lieu}
-                  </Text>
-                </Card>
-              </TouchableOpacity>
-            ))
-          )}
         </FadeInView>
       </ScrollView>
     </View>

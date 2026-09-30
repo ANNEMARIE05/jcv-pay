@@ -15,7 +15,6 @@ import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { TabsSelector } from '@/components/common/TabsSelector';
 import { PaginationBar } from '@/components/common/PaginationBar';
-import { FilterChips } from '@/components/common/FilterChips';
 import { usePagedList } from '@/hooks/usePagedList';
 import { useFinanceStore } from '@/store/financeStore';
 import { ListSkeleton } from '@/components/motion/Skeleton';
@@ -53,7 +52,6 @@ export default function ContributionsScreen() {
   const cotisationsStatutaires = useFinanceStore((s) => s.cotisations);
 
   const [activeCategory, setActiveCategory] = useState('TOUS');
-  const [cotisStatut, setCotisStatut] = useState<'TOUS' | 'A_PAYER' | 'PARTIEL' | 'PAYE'>('TOUS');
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const [selectedDay, setSelectedDay] = useState(() => toDateKey(new Date()));
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,12 +87,11 @@ export default function ContributionsScreen() {
       const matchSearch =
         c.titre.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.categorie.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchStatut = cotisStatut === 'TOUS' || c.statut === cotisStatut;
-      return matchCat && matchSearch && matchStatut;
+      return matchCat && matchSearch;
     });
-  }, [activeCategory, searchQuery, cotisStatut, cotisationsStatutaires]);
+  }, [activeCategory, searchQuery, cotisationsStatutaires]);
 
-  const cotisPage = usePagedList(filteredCotisations, 6, `${activeCategory}|${searchQuery}|${cotisStatut}`);
+  const cotisPage = usePagedList(filteredCotisations, 6, `${activeCategory}|${searchQuery}`);
   const txPage = usePagedList(transactions, 6, 'tx');
 
   return (
@@ -218,18 +215,6 @@ export default function ContributionsScreen() {
             onChangeTab={setActiveCategory}
             scrollable
           />
-          <View style={{ marginTop: 10 }}>
-            <FilterChips
-              value={cotisStatut}
-              onChange={setCotisStatut}
-              options={[
-                { id: 'TOUS', label: 'Tous' },
-                { id: 'A_PAYER', label: 'À payer' },
-                { id: 'PARTIEL', label: 'Partiel' },
-                { id: 'PAYE', label: 'Payé' },
-              ]}
-            />
-          </View>
         </View>
 
         {/* Results Section */}

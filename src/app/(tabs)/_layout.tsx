@@ -111,7 +111,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="payeurs"
         options={{
-          title: 'Payeurs',
+          title: 'Fidèles',
           href: staff ? undefined : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons

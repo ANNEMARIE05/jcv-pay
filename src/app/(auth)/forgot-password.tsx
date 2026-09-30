@@ -13,29 +13,35 @@ import { Header } from '@/components/common/Header';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
+import { useAuthStore } from '@/store/authStore';
 import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 
 export default function ForgotPasswordScreen() {
-  const [email, setEmail] = useState('');
+  const [telephone, setTelephone] = useState('');
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
+  const requestPasswordReset = useAuthStore((s) => s.requestPasswordReset);
 
   const handleSendCode = async () => {
-    if (!email.trim()) {
-      Alert.alert('Email requis', 'Veuillez saisir votre adresse email.');
+    if (!telephone.trim()) {
+      Alert.alert('Numéro requis', 'Saisissez le numéro associé à votre compte.');
       return;
     }
 
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    setLoading(false);
-    setSent(true);
-
-    Alert.alert(
-      'Code envoyé',
-      `Un code de vérification à 4 chiffres a été envoyé à ${email}.`,
-      [{ text: 'Saisir le code', onPress: () => router.push('/(auth)/verify-otp') }]
-    );
+    try {
+      const code = await requestPasswordReset(telephone.trim());
+      Alert.alert(
+        'Code prêt',
+        code
+          ? `Code de développement : ${code}. Il expire dans 10 minutes.`
+          : 'Si ce numéro existe, un code de réinitialisation a été préparé.',
+        [{ text: 'Saisir le code', onPress: () => router.push('/(auth)/verify-otp') }]
+      );
+    } catch (error) {
+      Alert.alert('Erreur', error instanceof Error ? error.message : 'Impossible d’envoyer le code.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -60,17 +66,16 @@ export default function ForgotPasswordScreen() {
             </View>
 
             <Text style={styles.instructions}>
-              Saisissez l adresse email associée à votre compte membre. Nous vous enverrons un code de réinitialisation sécurisé.
+              Saisissez le numéro de téléphone de votre compte. Un code à 4 chiffres permettra de choisir un nouveau mot de passe.
             </Text>
 
             <Input
-              label="Adresse Email"
-              placeholder="ex: ezekiel@gmail.com"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              leftIcon={<Ionicons name="mail-outline" size={20} color={AppColors.textSecondary} />}
+              label="Numéro de téléphone"
+              placeholder="+225 07 47 18 50 39"
+              value={telephone}
+              onChangeText={setTelephone}
+              keyboardType="phone-pad"
+              leftIcon={<Ionicons name="call-outline" size={20} color={AppColors.textSecondary} />}
             />
 
             <Button

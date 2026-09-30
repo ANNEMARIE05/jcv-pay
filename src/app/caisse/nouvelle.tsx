@@ -31,7 +31,7 @@ export default function NouvelleCaisseScreen() {
     return <Redirect href="/(tabs)/projets" />;
   }
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!nom.trim() || !objectif.trim()) {
       Alert.alert('Champs requis', 'Indiquez le nom et l objectif en FCFA.');
       return;
@@ -42,18 +42,21 @@ export default function NouvelleCaisseScreen() {
       return;
     }
 
-    openProjectCaisse({
-      nom: nom.trim(),
-      description: description.trim() || 'Nouvelle collecte',
-      projetId,
-      objectif: obj,
-    });
-
-    Alert.alert(
-      'Caisse ouverte',
-      'Les fidèles la voient dans l onglet Caisses et peuvent y contribuer.',
-      [{ text: 'OK', onPress: () => router.replace('/(tabs)/projets') }]
-    );
+    try {
+      await openProjectCaisse({
+        nom: nom.trim(),
+        description: description.trim() || 'Nouvelle collecte',
+        projetId,
+        objectif: obj,
+      });
+      Alert.alert(
+        'Caisse ouverte',
+        'Les fidèles la voient dans l onglet Caisses et peuvent y contribuer.',
+        [{ text: 'OK', onPress: () => router.replace('/(tabs)/projets') }]
+      );
+    } catch (error) {
+      Alert.alert('Caisse non ouverte', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
   return (
@@ -76,7 +79,7 @@ export default function NouvelleCaisseScreen() {
     >
       <Card style={styles.card} variant="elevated">
         <Text style={styles.hint}>
-          Ouvrez une caisse autonome, ou rattachez-la à un projet existant.
+          La caisse principale existe déjà et ne se supprime pas. Ici, vous ouvrez une caisse pour un projet ou un besoin précis.
         </Text>
 
         <Input

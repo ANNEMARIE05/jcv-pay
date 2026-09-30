@@ -28,8 +28,8 @@ export default function RegisterScreen() {
   const register = useAuthStore((s) => s.register);
 
   const handleRegister = async () => {
-    if (!nomComplet.trim() || !email.trim() || !password) {
-      Alert.alert('Champs requis', 'Veuillez renseigner votre nom, email et mot de passe.');
+    if (!nomComplet.trim() || !telephone.trim() || password.length < 8) {
+      Alert.alert('Champs requis', 'Saisissez votre nom, votre numéro et un mot de passe d’au moins 8 caractères.');
       return;
     }
     if (!agreeTerms) {
@@ -50,11 +50,12 @@ export default function RegisterScreen() {
         nom,
         prenom,
         email,
-        telephone: telephone || '+225 07 00 00 00 00',
+        telephone,
+        motDePasse: password,
       });
-      router.push('/(auth)/verify-otp');
-    } catch {
-      Alert.alert('Erreur', 'Impossible de créer le compte pour le moment.');
+      router.replace('/(tabs)');
+    } catch (error) {
+      Alert.alert('Erreur', error instanceof Error ? error.message : 'Impossible de créer le compte pour le moment.');
     } finally {
       setLoading(false);
     }

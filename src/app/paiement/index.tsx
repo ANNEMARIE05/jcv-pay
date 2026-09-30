@@ -9,6 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AppColors, Shadows } from '@/constants/colors';
@@ -38,9 +39,11 @@ export default function PaiementScreen() {
   }>();
 
   const processPayment = useFinanceStore((s) => s.processPayment);
+  const syncPayment = useFinanceStore((s) => s.syncPayment);
 
   const [selectedMethod, setSelectedMethod] = useState<MoyenPaiement>('WAVE');
   const [isProcessing, setIsProcessing] = useState(false);
+  const selectedChannel = VERSEMENT_CHANNELS.find((method) => method.id === selectedMethod);
 
   const amount = parseInt(params.montant || '25000', 10);
   const titre = params.titre || 'Contribution Financière';
@@ -51,7 +54,7 @@ export default function PaiementScreen() {
   const handleDeclare = async () => {
     setIsProcessing(true);
     try {
-      const generatedReceipt = await processPayment({
+      const result = await processPayment({
         titre,
         type,
         montant: amount,
@@ -61,11 +64,15 @@ export default function PaiementScreen() {
         projetId: params.projetId,
         evenementId: params.evenementId,
       });
+      if (result.checkoutUrl) {
+        await WebBrowser.openBrowserAsync(result.checkoutUrl);
+        await syncPayment(result.transactionId);
+      }
       setIsProcessing(false);
-      router.replace(`/recu/${generatedReceipt.id}?choix=1`);
-    } catch {
+      router.replace(`/recu/${result.recu.id}?choix=1`);
+    } catch (error) {
       setIsProcessing(false);
-      Alert.alert('Erreur', 'Impossible d enregistrer la déclaration. Réessayez.');
+      Alert.alert('Paiement impossible', error instanceof Error ? error.message : 'Réessayez.');
     }
   };
 
@@ -76,7 +83,7 @@ export default function PaiementScreen() {
       header={
         <Header
           title="Comment verser"
-          subtitle="Le paiement se fait hors de l application"
+          subtitle="Wave, Orange, MTN, Moov ou carte"
           showBack
           onBack={() => {
             if (router.canGoBack()) router.back();
@@ -94,7 +101,7 @@ export default function PaiementScreen() {
             </Text>
           </View>
           <Button
-            title="J ai noté, déclarer"
+            title={selectedChannel?.geniusPay ? 'Payer avec GeniusPay' : 'J ai noté, déclarer'}
             onPress={handleDeclare}
             size="lg"
             variant="primary"
@@ -146,16 +153,18 @@ export default function PaiementScreen() {
               </View>
               <View style={styles.totalDivider} />
               <Text style={styles.phoneHint}>
-                L application n encaisse pas l argent. Vous versez via Wave, Orange Money, virement ou espèces. La trésorerie confirme ensuite et le reçu officiel apparaît.
+                {selectedChannel?.geniusPay
+                  ? 'Wave, Orange, MTN, Moov et carte sont encaissés par GeniusPay. Le reçu se met à jour dès confirmation.'
+                  : 'Ce canal est déclaré dans l’application. La trésorerie confirme ensuite le reçu officiel.'}
               </Text>
             </View>
           </Card>
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Où envoyer l argent</Text>
+          <Text style={styles.sectionTitle}>Comment verser</Text>
           <Text style={styles.sectionSubtitle}>
-            Choisissez le canal, versez, puis déclarez. Un seul clic suffit.
+            Les moyens électroniques ouvrent GeniusPay. Virement et espèces restent une déclaration.
           </Text>
 
           <View style={styles.methodsList}>
@@ -213,7 +222,9 @@ export default function PaiementScreen() {
         <View style={styles.securityRow}>
           <Ionicons name="information-circle" size={18} color={AppColors.primary} />
           <Text style={styles.securityText}>
-            Après votre versement, un administrateur le confirme. Vous pourrez alors télécharger le reçu.
+            {selectedChannel?.geniusPay
+              ? 'Le paiement est traité par GeniusPay. Revenez dans JCV Pay après la page de checkout.'
+              : 'Après votre versement, un trésorier le confirme. Le reçu officiel apparaît alors.'}
           </Text>
         </View>
     </KeyboardAwareScreen>

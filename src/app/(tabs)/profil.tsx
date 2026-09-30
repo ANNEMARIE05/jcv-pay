@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,15 @@ import {
   Alert,
   Platform,
   StatusBar,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AppColors, Shadows } from '@/constants/colors';
 import { Card } from '@/components/common/Card';
+import { Input } from '@/components/common/Input';
+import { Button } from '@/components/common/Button';
 import { useAuthStore } from '@/store/authStore';
 import { HomeSkeleton } from '@/components/motion/Skeleton';
 import { FadeInView } from '@/components/motion/FadeIn';
@@ -39,8 +42,12 @@ export default function ProfilScreen() {
 
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const switchRole = useAuthStore((s) => s.switchRole);
+  const changePassword = useAuthStore((s) => s.changePassword);
   const staff = canManageCampaigns(user?.role);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [savingPassword, setSavingPassword] = useState(false);
 
   const ready = useScreenReady(520);
 
@@ -90,8 +97,8 @@ export default function ProfilScreen() {
               },
               {
                 id: 'payers',
-                title: 'Tous les payeurs',
-                subtitle: 'Recherche, filtres, pagination',
+                title: 'Les fidèles',
+                subtitle: 'Annuaire de l’assemblée',
                 icon: 'people-outline',
                 route: '/(tabs)/payeurs',
               },
@@ -130,6 +137,13 @@ export default function ProfilScreen() {
     {
       title: 'Compte',
       items: [
+        {
+          id: 'password',
+          title: 'Modifier le mot de passe',
+          subtitle: 'À faire dès la première connexion',
+          icon: 'lock-closed-outline',
+          action: () => setPasswordOpen(true),
+        },
         {
           id: 'notifications',
           title: 'Notifications',
@@ -200,17 +214,6 @@ export default function ProfilScreen() {
           <Text style={styles.profileRole}>
             {user ? ROLE_LABELS[user.role] : 'Fidèle'}
           </Text>
-
-          <TouchableOpacity
-            style={styles.switchRoleBtn}
-            onPress={() => switchRole()}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="swap-horizontal" size={16} color={AppColors.white} />
-            <Text style={styles.switchRoleBtnText}>
-              Essayer un autre rôle
-            </Text>
-          </TouchableOpacity>
         </View>
 
         {/* Menu Sections (Screen 15 Style) */}
@@ -287,6 +290,55 @@ export default function ProfilScreen() {
         </FadeInView>
       </ScrollView>
       )}
+      <Modal visible={passwordOpen} transparent animationType="fade" onRequestClose={() => setPasswordOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <Card style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Nouveau mot de passe</Text>
+            <Input
+              label="Mot de passe actuel"
+              value={oldPassword}
+              onChangeText={setOldPassword}
+              isPassword
+              placeholder="••••••••"
+            />
+            <Input
+              label="Nouveau mot de passe"
+              value={newPassword}
+              onChangeText={setNewPassword}
+              isPassword
+              placeholder="8 caractères minimum"
+            />
+            <Button
+              title="Enregistrer"
+              loading={savingPassword}
+              onPress={async () => {
+                if (newPassword.length < 8) {
+                  Alert.alert('Mot de passe trop court', 'Utilisez au moins 8 caractères.');
+                  return;
+                }
+                setSavingPassword(true);
+                try {
+                  await changePassword(oldPassword, newPassword);
+                  setOldPassword('');
+                  setNewPassword('');
+                  setPasswordOpen(false);
+                  Alert.alert('Mot de passe modifié', 'Utilisez-le lors de votre prochaine connexion.');
+                } catch (error) {
+                  Alert.alert(
+                    'Modification impossible',
+                    error instanceof Error ? error.message : 'Réessayez.'
+                  );
+                } finally {
+                  setSavingPassword(false);
+                }
+              }}
+            />
+            <TouchableOpacity onPress={() => setPasswordOpen(false)} style={styles.modalCancel}>
+              <Text style={styles.modalCancelText}>Annuler</Text>
+            </TouchableOpacity>
+          </Card>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -507,5 +559,29 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: AppColors.textMuted,
     marginTop: 2,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    padding: 20,
+    borderRadius: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: AppColors.textPrimary,
+    marginBottom: 12,
+  },
+  modalCancel: {
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  modalCancelText: {
+    color: AppColors.textSecondary,
+    fontWeight: '600',
   },
 });

@@ -28,6 +28,7 @@ import { ListSkeleton } from '@/components/motion/Skeleton';
 import { useScreenReady } from '@/hooks/useScreenReady';
 import { isStaff } from '@/constants/roles';
 import { PayersDirectory } from '@/components/finance/PayersDirectory';
+import { CaisseDesk } from '@/components/finance/CaisseDesk';
 
 type TresorerieTab =
   | 'VUE_GLOBALE'
@@ -49,8 +50,6 @@ export default function TresorerieScreen() {
   const transactions = useFinanceStore((s) => s.transactions);
   const mouvements = useFinanceStore((s) => s.mouvements);
   const utilisateurs = useFinanceStore((s) => s.utilisateurs);
-  const caissesProjet = useFinanceStore((s) => s.caissesProjet);
-  const closeProjectCaisse = useFinanceStore((s) => s.closeProjectCaisse);
   const openProjectCaisse = useFinanceStore((s) => s.openProjectCaisse);
   const validatePayment = useFinanceStore((s) => s.validatePayment);
   const recordCashPayment = useFinanceStore((s) => s.recordCashPayment);
@@ -88,7 +87,7 @@ export default function TresorerieScreen() {
     return <Redirect href="/(tabs)" />;
   }
 
-  const handleRecordCash = () => {
+  const handleRecordCash = async () => {
     if (!cashDonorName.trim() || !cashAmount.trim()) {
       Alert.alert('Champs obligatoires', 'Veuillez saisir le nom du donateur et le montant reçu.');
       return;
@@ -99,27 +98,29 @@ export default function TresorerieScreen() {
       return;
     }
 
-    const recu = recordCashPayment({
-      donateurNom: cashDonorName.trim(),
-      donateurTelephone: cashDonorPhone.trim(),
-      montant: amt,
-      type: cashType,
-      titre: cashTitle.trim() || 'Versement en espèces',
-    });
-
-    setShowCashModal(false);
-    setCashDonorName('');
-    setCashDonorPhone('+225 ');
-    setCashAmount('');
-
-    Alert.alert(
-      'Encaissement Réussi !',
-      `Reçu officiel N° ${recu.numeroRecu} édité pour ${cashDonorName}.\nMontant : ${amt.toLocaleString('fr-FR')} FCFA.`,
-      [
-        { text: 'Fermer', style: 'cancel' },
-        { text: 'Voir le Billet / Reçu', onPress: () => router.push(`/recu/${recu.id}`) },
-      ]
-    );
+    try {
+      const recu = await recordCashPayment({
+        donateurNom: cashDonorName.trim(),
+        donateurTelephone: cashDonorPhone.trim(),
+        montant: amt,
+        type: cashType,
+        titre: cashTitle.trim() || 'Versement en espèces',
+      });
+      setShowCashModal(false);
+      setCashDonorName('');
+      setCashDonorPhone('+225 ');
+      setCashAmount('');
+      Alert.alert(
+        'Encaissement Réussi !',
+        `Reçu officiel N° ${recu.numeroRecu} édité pour ${cashDonorName}.\nMontant : ${amt.toLocaleString('fr-FR')} FCFA.`,
+        [
+          { text: 'Fermer', style: 'cancel' },
+          { text: 'Voir le Billet / Reçu', onPress: () => router.push(`/recu/${recu.id}`) },
+        ]
+      );
+    } catch (error) {
+      Alert.alert('Encaissement impossible', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
   const handleValidate = (txId: string, donateur: string, montant: number) => {
@@ -130,16 +131,20 @@ export default function TresorerieScreen() {
         { text: 'Annuler', style: 'cancel' },
         {
           text: 'Confirmer & Créditer',
-          onPress: () => {
-            validatePayment(txId);
-            Alert.alert('Succès', 'Versement validé et ajouté à la trésorerie.');
+          onPress: async () => {
+            try {
+              await validatePayment(txId);
+              Alert.alert('Succès', 'Versement validé et ajouté à la trésorerie.');
+            } catch (error) {
+              Alert.alert('Validation impossible', error instanceof Error ? error.message : 'Réessayez.');
+            }
           },
         },
       ]
     );
   };
 
-  const handleWithdraw = () => {
+  const handleWithdraw = async () => {
     if (!withdrawMotif.trim() || !withdrawAmount.trim()) {
       Alert.alert('Champs obligatoires', 'Indiquez le montant et le motif du retrait.');
       return;
@@ -150,32 +155,36 @@ export default function TresorerieScreen() {
       return;
     }
 
-    const result = recordWithdrawal({
-      montant: amt,
-      motif: withdrawMotif.trim(),
-      source: withdrawSource,
-      auteur: user ? `${user.prenom} ${user.nom}`.trim() : 'Trésorier',
-      beneficiaire: withdrawBeneficiaire.trim() || undefined,
-    });
+    try {
+      const result = await recordWithdrawal({
+        montant: amt,
+        motif: withdrawMotif.trim(),
+        source: withdrawSource,
+        auteur: user ? `${user.prenom} ${user.nom}`.trim() : 'Trésorier',
+        beneficiaire: withdrawBeneficiaire.trim() || undefined,
+      });
 
-    if (!result) {
+      if (!result) {
+        Alert.alert(
+          'Solde insuffisant',
+          'Le montant demandé dépasse le solde disponible sur cette caisse.'
+        );
+        return;
+      }
+
+      setShowWithdrawModal(false);
+      setWithdrawAmount('');
+      setWithdrawMotif('');
+      setWithdrawBeneficiaire('');
       Alert.alert(
-        'Solde insuffisant',
-        'Le montant demandé dépasse le solde disponible sur cette caisse.'
+        'Retrait enregistré',
+        `${amt.toLocaleString('fr-FR')} FCFA retirés.\nNouveau solde global : ${
+          useFinanceStore.getState().tresorerieGlobale.soldeTotal.toLocaleString('fr-FR')
+        } FCFA.`
       );
-      return;
+    } catch (error) {
+      Alert.alert('Retrait impossible', error instanceof Error ? error.message : 'Réessayez.');
     }
-
-    setShowWithdrawModal(false);
-    setWithdrawAmount('');
-    setWithdrawMotif('');
-    setWithdrawBeneficiaire('');
-    Alert.alert(
-      'Retrait enregistré',
-      `${amt.toLocaleString('fr-FR')} FCFA retirés.\nNouveau solde global : ${
-        useFinanceStore.getState().tresorerieGlobale.soldeTotal.toLocaleString('fr-FR')
-      } FCFA.`
-    );
   };
 
   const sourceLabel = (s: SourceCaisse) => {
@@ -265,15 +274,9 @@ export default function TresorerieScreen() {
           </Text>
 
           <Card style={styles.helpCard}>
-            <Text style={styles.helpTitle}>Comment gérer la caisse ?</Text>
+            <Text style={styles.helpTitle}>La caisse principale</Text>
             <Text style={styles.helpLine}>
-              1. Un membre paye → l argent entre → le solde augmente automatiquement.
-            </Text>
-            <Text style={styles.helpLine}>
-              2. Vous dépensez (achat, frais…) → appuyez sur « Retirer » → indiquez le montant et le motif.
-            </Text>
-            <Text style={styles.helpLine}>
-              3. Le solde baisse, et le retrait reste visible dans « Journal caisse ».
+              L’argent de l’église y est regroupé. Pour un projet, créez une autre caisse et transférez.
             </Text>
           </Card>
 
@@ -284,7 +287,7 @@ export default function TresorerieScreen() {
               <Text style={styles.soldeCurrency}>FCFA</Text>
             </Text>
             <Text style={styles.soldeHint}>
-              {payers.length} payeurs • {validatedPayments.length} paiements validés •{' '}
+              {payers.length} fidèles • {validatedPayments.length} versements confirmés •{' '}
               {utilisateurs.filter((u) => u.role === 'MEMBRE').length} membres inscrits
             </Text>
           </Card>
@@ -339,7 +342,7 @@ export default function TresorerieScreen() {
           >
             {[
               { id: 'VUE_GLOBALE', label: 'Vue globale' },
-              { id: 'PAYEURS', label: `Qui a payé (${payers.length})` },
+              { id: 'PAYEURS', label: `Fidèles (${payers.length})` },
               { id: 'JOURNAL', label: 'Journal caisse' },
               { id: 'CAISSES', label: 'Caisses' },
               { id: 'VALIDATIONS', label: `Validations (${pendingPayments.length})` },
@@ -504,7 +507,7 @@ export default function TresorerieScreen() {
         {activeTab === 'PAYEURS' && (
           <View style={styles.tabBody}>
             <Text style={styles.inlineHint}>
-              Tous les inscrits et tous les versements, y compris en attente ou rejetés.
+              Les fidèles de l’assemblée et leurs versements.
             </Text>
             <PayersDirectory />
           </View>
@@ -566,81 +569,14 @@ export default function TresorerieScreen() {
               activeOpacity={0.85}
             >
               <Ionicons name="add-circle" size={20} color={AppColors.white} />
-              <Text style={styles.openCaisseBtnText}>Ouvrir une nouvelle caisse projet</Text>
+              <Text style={styles.openCaisseBtnText}>Ouvrir une autre caisse</Text>
             </TouchableOpacity>
 
             <Text style={styles.inlineHint}>
-              Chaque caisse montre combien est rentré. Quand le projet est fini, marquez-la terminée.
+              La caisse principale ne se supprime pas. Les autres caisses se transfèrent, puis se suppriment.
             </Text>
 
-            <Text style={styles.sectionTitle}>Caisses projets</Text>
-            <View style={styles.caissesList}>
-              {caissesProjet.map((c) => {
-                const percent = c.objectif
-                  ? Math.min(Math.round((c.montantCollecte / c.objectif) * 100), 100)
-                  : 0;
-                return (
-                  <Card key={c.id} style={styles.caisseDetailCard} variant="elevated">
-                    <View
-                      style={[
-                        styles.caisseIconCircle,
-                        {
-                          backgroundColor:
-                            c.statut === 'OUVERTE' ? '#ECFDF5' : '#F1F5F9',
-                        },
-                      ]}
-                    >
-                      <Ionicons
-                        name={c.statut === 'OUVERTE' ? 'folder-open' : 'checkmark-done'}
-                        size={22}
-                        color={c.statut === 'OUVERTE' ? '#10B981' : AppColors.textMuted}
-                      />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <View style={styles.caisseTitleRow}>
-                        <Text style={styles.caisseDetailTitle}>{c.nom}</Text>
-                        <Badge
-                          label={c.statut === 'OUVERTE' ? 'Ouverte' : 'Terminée'}
-                          variant={c.statut === 'OUVERTE' ? 'success' : 'neutral'}
-                          size="sm"
-                        />
-                      </View>
-                      <Text style={styles.caisseDetailDesc}>{c.description}</Text>
-                      <Text style={styles.caisseDetailAmount}>
-                        Rentré : {c.montantCollecte.toLocaleString('fr-FR')} FCFA
-                      </Text>
-                      <Text style={styles.caisseDetailDesc}>
-                        Objectif {c.objectif.toLocaleString('fr-FR')} F • {percent}%
-                        {c.visibleAuxMembres ? ' • Visible aux membres' : ''}
-                      </Text>
-                      {c.statut === 'OUVERTE' && (
-                        <TouchableOpacity
-                          style={styles.closeCaisseBtn}
-                          onPress={() => {
-                            Alert.alert(
-                              'Clôturer cette caisse ?',
-                              `Marquer « ${c.nom} » comme terminée ? Le projet lié sera aussi clôturé.`,
-                              [
-                                { text: 'Annuler', style: 'cancel' },
-                                {
-                                  text: 'Oui, c est terminé',
-                                  onPress: () => {
-                                    closeProjectCaisse(c.id);
-                                    Alert.alert('Caisse terminée', 'Les membres voient maintenant le statut Terminé.');
-                                  },
-                                },
-                              ]
-                            );
-                          }}
-                        >
-                          <Text style={styles.closeCaisseBtnText}>Marquer terminée</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </Card>
-                );
-              })}
-            </View>
+            <CaisseDesk />
 
             <Text style={[styles.sectionTitle, { marginTop: 8 }]}>Comptes & moyens de paiement</Text>
             <View style={styles.caissesList}>
@@ -980,25 +916,29 @@ export default function TresorerieScreen() {
 
               <Button
                 title="Ouvrir la caisse pour les membres"
-                onPress={() => {
+                onPress={async () => {
                   if (!newCaisseNom.trim() || !newCaisseObjectif.trim()) {
                     Alert.alert('Champs requis', 'Indiquez le nom et l objectif.');
                     return;
                   }
                   const obj = parseInt(newCaisseObjectif.replace(/\D/g, ''), 10) || 0;
-                  openProjectCaisse({
-                    nom: newCaisseNom.trim(),
-                    description: newCaisseDesc.trim() || 'Nouvelle collecte',
-                    objectif: obj,
-                  });
-                  setShowNewCaisseModal(false);
-                  setNewCaisseNom('');
-                  setNewCaisseDesc('');
-                  setNewCaisseObjectif('');
-                  Alert.alert(
-                    'Caisse ouverte',
-                    'Les membres voient maintenant cette caisse dans les projets / contributions.'
-                  );
+                  try {
+                    await openProjectCaisse({
+                      nom: newCaisseNom.trim(),
+                      description: newCaisseDesc.trim() || 'Nouvelle collecte',
+                      objectif: obj,
+                    });
+                    setShowNewCaisseModal(false);
+                    setNewCaisseNom('');
+                    setNewCaisseDesc('');
+                    setNewCaisseObjectif('');
+                    Alert.alert(
+                      'Caisse ouverte',
+                      'Les membres voient maintenant cette caisse dans les projets / contributions.'
+                    );
+                  } catch (error) {
+                    Alert.alert('Caisse non ouverte', error instanceof Error ? error.message : 'Réessayez.');
+                  }
                 }}
                 variant="primary"
                 size="lg"

@@ -11,16 +11,18 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppColors } from '@/constants/colors';
 import { Header } from '@/components/common/Header';
 import { Button } from '@/components/common/Button';
+import { Input } from '@/components/common/Input';
 import { Card } from '@/components/common/Card';
 import { useAuthStore } from '@/store/authStore';
 
 export default function VerifyOtpScreen() {
-  const [code, setCode] = useState(['6', '2', '1', '']);
-  const [currentIndex, setCurrentIndex] = useState(3);
+  const [code, setCode] = useState(['', '', '', '']);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [password, setPassword] = useState('');
   const [timer, setTimer] = useState(45);
   const [loading, setLoading] = useState(false);
 
-  const verifyOtp = useAuthStore((s) => s.verifyOtp);
+  const resetPassword = useAuthStore((s) => s.resetPassword);
 
   useEffect(() => {
     if (timer > 0) {
@@ -50,21 +52,22 @@ export default function VerifyOtpScreen() {
 
   const handleVerify = async () => {
     const fullCode = code.join('');
-    if (fullCode.length < 4) {
-      Alert.alert('Code incomplet', 'Veuillez saisir les 4 chiffres du code.');
+    if (fullCode.length < 4 || password.length < 8) {
+      Alert.alert(
+        'Champs requis',
+        'Saisissez le code à 4 chiffres et un nouveau mot de passe d’au moins 8 caractères.'
+      );
       return;
     }
 
     setLoading(true);
     try {
-      const success = await verifyOtp(fullCode);
-      if (success) {
-        Alert.alert('Compte validé', 'Bienvenue sur votre espace financier d église !', [
-          { text: 'Continuer', onPress: () => router.replace('/(tabs)') },
-        ]);
-      }
-    } catch {
-      Alert.alert('Erreur', 'Code de vérification invalide.');
+      await resetPassword(fullCode, password);
+      Alert.alert('Mot de passe modifié', 'Connectez-vous avec votre numéro et le nouveau mot de passe.', [
+        { text: 'Connexion', onPress: () => router.replace('/(auth)/login') },
+      ]);
+    } catch (error) {
+      Alert.alert('Erreur', error instanceof Error ? error.message : 'Code de vérification invalide.');
     } finally {
       setLoading(false);
     }
@@ -74,8 +77,8 @@ export default function VerifyOtpScreen() {
     <View style={styles.container}>
       {/* Teal Header */}
       <Header
-        title="Vérifier votre compte"
-        subtitle="Verify Your Account"
+        title="Nouveau mot de passe"
+        subtitle="Code reçu puis nouveau mot de passe"
         showBack
         variant="curved"
       />
@@ -111,9 +114,18 @@ export default function VerifyOtpScreen() {
             )}
           </View>
 
+          <Input
+            label="Nouveau mot de passe"
+            placeholder="8 caractères minimum"
+            value={password}
+            onChangeText={setPassword}
+            isPassword
+            leftIcon={<Ionicons name="lock-closed-outline" size={20} color={AppColors.textSecondary} />}
+          />
+
           {/* Verify Button */}
           <Button
-            title="Vérifier"
+            title="Enregistrer"
             onPress={handleVerify}
             loading={loading}
             size="lg"
