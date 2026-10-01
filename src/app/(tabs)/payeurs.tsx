@@ -31,16 +31,26 @@ export default function PayeursScreen() {
 
   const close = () => setOpen(false);
 
-  const save = () => {
+  const save = async () => {
     if (!prenom.trim() || !nom.trim() || telephone.trim().length < 8) {
       Alert.alert('Champs requis', 'Indiquez le prénom, le nom et le numéro de téléphone.');
       return;
     }
-    addFidele({ prenom, nom, telephone });
-    setPrenom('');
-    setNom('');
-    setTelephone('+225 ');
-    setOpen(false);
+    try {
+      const created = await addFidele({ prenom, nom, telephone });
+      setPrenom('');
+      setNom('');
+      setTelephone('+225 ');
+      setOpen(false);
+      Alert.alert(
+        'Fidèle ajouté',
+        created.motDePasseTemporaire
+          ? `Le compte est créé. Mot de passe temporaire : ${created.motDePasseTemporaire}. La connexion se fait avec le numéro de téléphone.`
+          : 'Le fidèle est enregistré.'
+      );
+    } catch (error) {
+      Alert.alert('Ajout impossible', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
   return (

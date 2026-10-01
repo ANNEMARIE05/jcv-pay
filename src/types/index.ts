@@ -171,6 +171,7 @@ export interface CaisseProjet {
   montantCollecte: number;
   objectif: number;
   statut: 'OUVERTE' | 'TERMINEE';
+  principale?: boolean;
   visibleAuxMembres: boolean;
   dateOuverture: string;
   dateCloture?: string;

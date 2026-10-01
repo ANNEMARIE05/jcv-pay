@@ -115,6 +115,8 @@ interface FinanceState {
     objectif: number;
   }) => Promise<CaisseProjet | void>;
   closeProjectCaisse: (caisseId: string) => Promise<void>;
+  transferCaisse: (payload: { fromId: string; toId: string; montant: number; motif: string }) => Promise<void>;
+  deleteCaisse: (caisseId: string) => Promise<void>;
   validatePayment: (transactionId: string) => Promise<void>;
   rejectPayment: (transactionId: string) => Promise<void>;
   getReceiptById: (id: string) => Recu | undefined;
@@ -135,7 +137,7 @@ interface FinanceState {
     departement?: string;
   }) => Promise<Utilisateur & { motDePasseTemporaire?: string }>;
   updateUserRole: (userId: string, role: RoleUtilisateur) => Promise<void>;
-  addFidele: (payload: { prenom: string; nom: string; telephone: string }) => void;
+  addFidele: (payload: { prenom: string; nom: string; telephone: string }) => Promise<Utilisateur & { motDePasseTemporaire?: string }>;
 }
 
 export function applyEspace(espace: EspacePayload) {
@@ -165,7 +167,7 @@ async function postEspace(path: string, body?: unknown) {
   return espace;
 }
 
-export const useFinanceStore = create<FinanceState>((set, get) => ({
+export const useFinanceStore = create<FinanceState>((_set, get) => ({
   resume: {
     totalContribue: 0,
     resteAPayer: 0,
@@ -226,6 +228,14 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
 
   closeProjectCaisse: async (caisseId) => {
     await postEspace(`/api/caisses/${caisseId}/cloturer`);
+  },
+
+  transferCaisse: async (payload) => {
+    await postEspace('/api/caisses/transfert', payload);
+  },
+
+  deleteCaisse: async (caisseId) => {
+    await postEspace(`/api/caisses/${caisseId}/supprimer`);
   },
 
   validatePayment: async (transactionId) => {
@@ -352,19 +362,12 @@ export const useFinanceStore = create<FinanceState>((set, get) => ({
     await postEspace(`/api/utilisateurs/${userId}/role`, { role });
   },
 
-  addFidele: ({ prenom, nom, telephone }) => {
-    const now = new Date();
-    const utilisateur: Utilisateur = {
-      id: `fidele-${now.getTime()}`,
-      prenom: prenom.trim(),
-      nom: nom.trim(),
-      telephone: telephone.trim(),
-      email: '',
-      matricule: `JCV-MBR-${String(now.getTime()).slice(-4)}`,
-      paroisse: 'Église Jésus Christ Victoire',
-      role: 'MEMBRE',
-      dateAdhesion: now.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
-    };
-    set((state) => ({ utilisateurs: [utilisateur, ...state.utilisateurs] }));
+  addFidele: async ({ prenom, nom, telephone }) => {
+    const data = await api.post<{
+      utilisateur: Utilisateur & { motDePasseTemporaire?: string };
+      espace: EspacePayload;
+    }>('/api/fideles', { prenom, nom, telephone });
+    applyEspace(data.espace);
+    return data.utilisateur;
   },
 }));

@@ -9,7 +9,7 @@ import { Card } from '@/components/common/Card';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
 import { useFinanceStore } from '@/store/financeStore';
-import { CAISSE_PRINCIPALE_ID, useCaisseDeskStore } from '@/store/caisseDeskStore';
+import { CAISSE_PRINCIPALE_ID } from '@/store/caisseDeskStore';
 import { CaisseProjet } from '@/types';
 
 type Cible = { id: string; nom: string; solde: number; principale?: boolean };
@@ -17,34 +17,27 @@ type Cible = { id: string; nom: string; solde: number; principale?: boolean };
 export function CaisseDesk({ allowContribute = false }: { allowContribute?: boolean }) {
   const caisses = useFinanceStore((s) => s.caissesProjet);
   const soldeEglise = useFinanceStore((s) => s.tresorerieGlobale.soldeTotal);
-  const deltas = useCaisseDeskStore((s) => s.deltas);
-  const removed = useCaisseDeskStore((s) => s.removed);
-  const move = useCaisseDeskStore((s) => s.move);
-  const remove = useCaisseDeskStore((s) => s.remove);
+  const transferCaisse = useFinanceStore((s) => s.transferCaisse);
+  const deleteCaisse = useFinanceStore((s) => s.deleteCaisse);
 
   const [fromId, setFromId] = useState<string | null>(null);
   const [toId, setToId] = useState<string | null>(null);
   const [montant, setMontant] = useState('');
   const [motif, setMotif] = useState('');
 
-  const solde = (id: string, base: number) => base + (deltas[id] || 0);
-
-  const autres = useMemo(
-    () => caisses.filter((c) => !removed.includes(c.id)),
-    [caisses, removed]
-  );
+  const autres = useMemo(() => caisses.filter((c) => !c.principale), [caisses]);
 
   const cibles: Cible[] = [
     {
       id: CAISSE_PRINCIPALE_ID,
       nom: 'Caisse principale',
-      solde: solde(CAISSE_PRINCIPALE_ID, soldeEglise),
+      solde: soldeEglise,
       principale: true,
     },
     ...autres.map((c) => ({
       id: c.id,
       nom: c.nom,
-      solde: solde(c.id, c.montantCollecte),
+      solde: c.montantCollecte,
     })),
   ];
 
@@ -67,7 +60,7 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
 
   const closeTransfer = () => setFromId(null);
 
-  const confirmTransfer = () => {
+  const confirmTransfer = async () => {
     if (!fromId || !toId || fromId === toId || fromId === CAISSE_PRINCIPALE_ID) {
       Alert.alert(
         'Transfert',
@@ -89,12 +82,16 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
       Alert.alert('Motif', 'Indiquez pourquoi l’argent change de caisse.');
       return;
     }
-    move(fromId, toId, amount);
-    closeTransfer();
+    try {
+      await transferCaisse({ fromId, toId, montant: amount, motif: motif.trim() });
+      closeTransfer();
+    } catch (error) {
+      Alert.alert('Transfert impossible', error instanceof Error ? error.message : 'Réessayez.');
+    }
   };
 
   const confirmDelete = (caisse: CaisseProjet) => {
-    const reste = solde(caisse.id, caisse.montantCollecte);
+    const reste = caisse.montantCollecte;
     if (reste > 0) {
       Alert.alert(
         'Transférez d’abord',
@@ -107,7 +104,15 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
       `« ${caisse.nom} » sera retirée. La caisse principale, elle, reste.`,
       [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer', style: 'destructive', onPress: () => remove(caisse.id) },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: () => {
+            deleteCaisse(caisse.id).catch((error) => {
+              Alert.alert('Suppression impossible', error instanceof Error ? error.message : 'Réessayez.');
+            });
+          },
+        },
       ]
     );
   };
@@ -139,7 +144,7 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
         </Text>
       ) : (
         autres.map((caisse) => {
-          const reste = solde(caisse.id, caisse.montantCollecte);
+          const reste = caisse.montantCollecte;
           return (
             <Card key={caisse.id} style={styles.card} variant="elevated">
               <Text style={styles.cardTitle}>{caisse.nom}</Text>
