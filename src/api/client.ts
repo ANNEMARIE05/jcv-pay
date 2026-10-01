@@ -2,7 +2,28 @@ import { tokenStorage } from '@/api/storage';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000';
 
+const PUBLIC_AUTH = [
+  '/api/auth/connexion',
+  '/api/auth/inscription',
+  '/api/auth/mot-de-passe/demande',
+  '/api/auth/mot-de-passe/reinitialiser',
+];
+
 let token: string | null = null;
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: () => void) {
+  onUnauthorized = handler;
+}
+
+function readMessage(body: { message?: unknown }) {
+  if (typeof body.message === 'string' && body.message.trim()) return body.message;
+  if (Array.isArray(body.message)) {
+    const text = body.message.filter((item) => typeof item === 'string').join('\n');
+    if (text) return text;
+  }
+  return 'La requête a échoué.';
+}
 
 export function getApiBaseUrl() {
   return BASE_URL;
@@ -36,7 +57,11 @@ export const api = {
     }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(body.message || 'La requête a échoué.');
+      if (response.status === 401 && !PUBLIC_AUTH.some((item) => path.startsWith(item))) {
+        await this.persistToken(null);
+        onUnauthorized?.();
+      }
+      throw new Error(readMessage(body));
     }
     return body as T;
   },

@@ -1,8 +1,7 @@
 import { create } from 'zustand';
-import { api } from '@/api/client';
+import { api, setUnauthorizedHandler } from '@/api/client';
 import { Utilisateur } from '@/types';
 import { applyEspace, EspacePayload } from '@/store/financeStore';
-import { mockAdmin, mockMembre, mockTresorier, mockUtilisateurs } from '@/mocks/utilisateurs.mock';
 
 interface AuthResponse {
   token: string;
@@ -16,7 +15,6 @@ interface AuthState {
   hydrated: boolean;
   pendingResetPhone: string | null;
   login: (identifiant: string, mdp: string) => Promise<boolean>;
-  enterAs: (role: 'ADMINISTRATEUR' | 'TRESORIER' | 'MEMBRE') => void;
   register: (data: {
     nom: string;
     prenom: string;
@@ -39,36 +37,7 @@ async function openSession(data: AuthResponse) {
   return data.utilisateur;
 }
 
-function localEspace(utilisateurs: Utilisateur[]): EspacePayload {
-  return {
-    resume: {
-      totalContribue: 0,
-      resteAPayer: 0,
-      enAttente: 0,
-      epargneSolde: 0,
-      projetsActifsCount: 0,
-      derniereContributionDate: '',
-    },
-    transactions: [],
-    projets: [],
-    evenements: [],
-    recus: [],
-    cotisations: [],
-    mouvements: [],
-    caissesProjet: [],
-    utilisateurs,
-    notifications: [],
-    tresorerieGlobale: {
-      soldeTotal: 0,
-      entreesMois: 0,
-      sortiesMois: 0,
-      soldeCaissePhysique: 0,
-      soldeWave: 0,
-      soldeOrangeMoney: 0,
-      soldeBancaire: 0,
-    },
-  };
-}
+let bootstrapTask: Promise<void> | null = null;
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
@@ -76,16 +45,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   hydrated: false,
   pendingResetPhone: null,
 
-  bootstrap: async () => {
-    if (get().hydrated) return;
-    set({ hydrated: true });
-  },
-
-  enterAs: (role) => {
-    const user =
-      role === 'ADMINISTRATEUR' ? mockAdmin : role === 'TRESORIER' ? mockTresorier : mockMembre;
-    applyEspace(localEspace(mockUtilisateurs));
-    set({ user, isAuthenticated: true, hydrated: true });
+  bootstrap: () => {
+    if (get().hydrated) return Promise.resolve();
+    if (bootstrapTask) return bootstrapTask;
+    bootstrapTask = (async () => {
+      try {
+        const token = await api.restoreToken();
+        if (!token) return;
+        const data = await api.get<{ utilisateur: Utilisateur; espace: EspacePayload }>('/api/auth/moi');
+        applyEspace(data.espace);
+        set({ user: data.utilisateur, isAuthenticated: true });
+      } catch {
+        await api.persistToken(null);
+        set({ user: null, isAuthenticated: false });
+      } finally {
+        set({ hydrated: true });
+      }
+    })();
+    return bootstrapTask;
   },
 
   login: async (identifiant, motDePasse) => {
@@ -125,7 +102,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   updateProfile: async (updated) => {
-    const data = await api.patch<{ utilisateur: Utilisateur }>('/api/auth/profil', updated);
+    const payload = Object.fromEntries(
+      Object.entries({
+        prenom: updated.prenom,
+        nom: updated.nom,
+        email: updated.email,
+        telephone: updated.telephone,
+        departement: updated.departement,
+      }).filter((entry) => entry[1] !== undefined)
+    );
+    const data = await api.patch<{ utilisateur: Utilisateur }>('/api/auth/profil', payload);
     set({ user: data.utilisateur });
   },
 }));
+
+setUnauthorizedHandler(() => {
+  useAuthStore.setState({ isAuthenticated: false, user: null, hydrated: true });
+});

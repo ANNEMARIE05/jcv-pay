@@ -89,6 +89,10 @@ interface FinanceState {
   caissesProjet: CaisseProjet[];
   utilisateurs: Utilisateur[];
   tresorerieGlobale: typeof emptyTreasury;
+  geniusPaySolde: number | null;
+  refreshEspace: (role?: RoleUtilisateur) => Promise<void>;
+  loadReceipt: (id: string) => Promise<Recu>;
+  loadGeniusPay: () => Promise<number | null>;
   processPayment: (payload: NewPaymentPayload) => Promise<{ recu: Recu; checkoutUrl?: string | null; transactionId: string }>;
   syncPayment: (transactionId: string) => Promise<void>;
   recordCashPayment: (payload: {
@@ -161,6 +165,25 @@ export function applyEspace(espace: EspacePayload) {
   }
 }
 
+function readGeniusPaySolde(payload: unknown): number | null {
+  const queue: unknown[] = [payload];
+  const keys = ['balance', 'solde', 'available_balance', 'available', 'amount', 'current_balance'];
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== 'object') continue;
+    const record = current as Record<string, unknown>;
+    for (const key of keys) {
+      const value = record[key];
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value);
+    }
+    Object.values(record).forEach((value) => {
+      if (value && typeof value === 'object') queue.push(value);
+    });
+  }
+  return null;
+}
+
 async function postEspace(path: string, body?: unknown) {
   const espace = await api.post<EspacePayload>(path, body);
   applyEspace(espace);
@@ -185,6 +208,44 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
   caissesProjet: [],
   utilisateurs: [],
   tresorerieGlobale: emptyTreasury,
+  geniusPaySolde: null,
+
+  refreshEspace: async (role) => {
+    const espace = await api.get<EspacePayload>('/api/espace');
+    applyEspace(espace);
+    if (role === 'ADMINISTRATEUR' || role === 'SUPER_ADMIN') {
+      try {
+        const utilisateurs = await api.get<Utilisateur[]>('/api/utilisateurs');
+        useFinanceStore.setState({ utilisateurs });
+      } catch {
+        // La liste de l’espace reste affichée si ce droit est refusé.
+      }
+    }
+    if (role === 'TRESORIER' || role === 'SUPER_ADMIN') {
+      try {
+        await get().loadGeniusPay();
+      } catch {
+        // Le solde marchand reste masqué s’il est indisponible.
+      }
+    }
+  },
+
+  loadReceipt: async (id) => {
+    const cached = get().getReceiptById(id);
+    if (cached) return cached;
+    const recu = await api.get<Recu>(`/api/paiements/recus/${encodeURIComponent(id)}`);
+    useFinanceStore.setState((state) => ({
+      recus: state.recus.some((item) => item.id === recu.id) ? state.recus : [recu, ...state.recus],
+    }));
+    return recu;
+  },
+
+  loadGeniusPay: async () => {
+    const data = await api.get<Record<string, unknown>>('/api/tresorerie/geniuspay');
+    const solde = readGeniusPaySolde(data);
+    useFinanceStore.setState({ geniusPaySolde: solde });
+    return solde;
+  },
 
   processPayment: async (payload) => {
     const data = await api.post<{
@@ -359,7 +420,8 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
   },
 
   updateUserRole: async (userId, role) => {
-    await postEspace(`/api/utilisateurs/${userId}/role`, { role });
+    const espace = await api.patch<EspacePayload>(`/api/utilisateurs/${userId}/role`, { role });
+    applyEspace(espace);
   },
 
   addFidele: async ({ prenom, nom, telephone }) => {

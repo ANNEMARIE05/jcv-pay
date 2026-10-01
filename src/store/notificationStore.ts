@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { api } from '@/api/client';
 import { NotificationItem } from '@/types';
+import type { EspacePayload } from '@/store/financeStore';
+
+function syncEspace(espace: EspacePayload) {
+  import('@/store/financeStore').then(({ applyEspace }) => applyEspace(espace)).catch(() => undefined);
+}
 
 interface NotificationState {
   notifications: NotificationItem[];
@@ -24,7 +29,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
         unreadCount: updated.filter((n) => !n.lue).length,
       };
     });
-    api.post(`/api/notifications/${id}/lire`).catch(() => undefined);
+    api.post<EspacePayload>(`/api/notifications/${id}/lire`).then(syncEspace).catch(() => undefined);
   },
 
   markAllAsRead: () => {
@@ -32,7 +37,7 @@ export const useNotificationStore = create<NotificationState>((set) => ({
       notifications: state.notifications.map((n) => ({ ...n, lue: true })),
       unreadCount: 0,
     }));
-    api.post('/api/notifications/lire-tout').catch(() => undefined);
+    api.post<EspacePayload>('/api/notifications/lire-tout').then(syncEspace).catch(() => undefined);
   },
 
   addNotification: (notif) => {

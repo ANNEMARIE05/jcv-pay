@@ -1,16 +1,23 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Redirect, Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppColors } from '@/constants/colors';
 import { useAuthStore } from '@/store/authStore';
+import { useFinanceStore } from '@/store/financeStore';
 import { canManageMoney, canManagePeople, isStaff } from '@/constants/roles';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const refreshEspace = useFinanceStore((s) => s.refreshEspace);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    refreshEspace(user.role).catch(() => undefined);
+  }, [refreshEspace, user?.id, user?.role]);
   const isAdmin = canManagePeople(user?.role);
   const isTreasurer = canManageMoney(user?.role);
   const staff = isStaff(user?.role);

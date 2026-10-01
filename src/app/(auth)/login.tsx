@@ -1,48 +1,40 @@
 'use no memo';
 
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { AppColors } from '@/constants/colors';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
+import { Input } from '@/components/common/Input';
+import { Button } from '@/components/common/Button';
 import { useAuthStore } from '@/store/authStore';
 import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 
-const COMPTES = [
-  {
-    role: 'ADMINISTRATEUR' as const,
-    label: 'Administrateur',
-    hint: 'Comptes et caisses',
-    icon: 'shield-checkmark' as const,
-    tint: '#E8EEF5',
-    color: '#1E3A5F',
-  },
-  {
-    role: 'TRESORIER' as const,
-    label: 'Trésorier',
-    hint: 'Argent reçu',
-    icon: 'wallet' as const,
-    tint: AppColors.accentLight,
-    color: AppColors.accentDark,
-  },
-  {
-    role: 'MEMBRE' as const,
-    label: 'Fidèle',
-    hint: 'Mes versements',
-    icon: 'person' as const,
-    tint: AppColors.primaryMuted,
-    color: AppColors.primary,
-  },
-];
-
 export default function LoginScreen() {
-  const enterAs = useAuthStore((s) => s.enterAs);
+  const login = useAuthStore((s) => s.login);
+  const [identifiant, setIdentifiant] = useState('');
+  const [motDePasse, setMotDePasse] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const openSpace = (role: (typeof COMPTES)[number]['role']) => {
-    enterAs(role);
-    router.replace('/(tabs)');
+  const handleLogin = async () => {
+    if (!identifiant.trim() || !motDePasse) {
+      Alert.alert('Champs requis', 'Saisissez votre téléphone ou votre email, puis votre mot de passe.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await login(identifiant.trim(), motDePasse);
+      router.replace('/(tabs)');
+    } catch (error) {
+      Alert.alert(
+        'Connexion impossible',
+        error instanceof Error ? error.message : 'Vérifiez vos identifiants.'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -59,26 +51,51 @@ export default function LoginScreen() {
     >
       <View style={styles.cardContainer}>
         <Card style={styles.formCard}>
-          <Text style={styles.loginTitle}>Choisissez un espace</Text>
+          <Text style={styles.loginTitle}>Connexion</Text>
           <Text style={styles.loginSubtitle}>
-            Trois comptes pour parcourir l’application. Pour changer, déconnectez-vous puis choisissez l’autre.
+            Utilisez votre numéro de téléphone, ou votre email si vous êtes administrateur.
           </Text>
 
-          <View style={styles.roleRow}>
-            {COMPTES.map((compte) => (
-              <TouchableOpacity
-                key={compte.role}
-                style={styles.roleCard}
-                onPress={() => openSpace(compte.role)}
-                activeOpacity={0.85}
-              >
-                <View style={[styles.roleIcon, { backgroundColor: compte.tint }]}>
-                  <Ionicons name={compte.icon} size={22} color={compte.color} />
-                </View>
-                <Text style={styles.roleName}>{compte.label}</Text>
-                <Text style={styles.roleHint}>{compte.hint}</Text>
-              </TouchableOpacity>
-            ))}
+          <Input
+            label="Téléphone ou email"
+            placeholder="+2250700000000"
+            value={identifiant}
+            onChangeText={setIdentifiant}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            leftIcon={<Ionicons name="person-outline" size={20} color={AppColors.textSecondary} />}
+          />
+
+          <Input
+            label="Mot de passe"
+            placeholder="••••••••"
+            value={motDePasse}
+            onChangeText={setMotDePasse}
+            isPassword
+            leftIcon={<Ionicons name="lock-closed-outline" size={20} color={AppColors.textSecondary} />}
+          />
+
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/forgot-password')}
+            style={styles.forgotLink}
+          >
+            <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+          </TouchableOpacity>
+
+          <Button
+            title="Se connecter"
+            onPress={handleLogin}
+            loading={loading}
+            size="lg"
+            variant="primary"
+          />
+
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>Pas encore de compte ? </Text>
+            <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
+              <Text style={styles.footerLink}>Créer un compte</Text>
+            </TouchableOpacity>
           </View>
         </Card>
       </View>
@@ -115,41 +132,29 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 18,
   },
-  roleRow: {
+  forgotLink: {
+    alignSelf: 'flex-end',
+    marginBottom: 16,
+    marginTop: -4,
+  },
+  forgotText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppColors.primary,
+  },
+  footerRow: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 10,
-    marginBottom: 18,
-  },
-  roleCard: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: AppColors.background,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: AppColors.borderLight,
-    paddingVertical: 16,
-    paddingHorizontal: 6,
-  },
-  roleIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    alignItems: 'center',
+    marginTop: 18,
   },
-  roleName: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: AppColors.textPrimary,
-    textAlign: 'center',
-  },
-  roleHint: {
-    fontSize: 11,
+  footerText: {
+    fontSize: 13,
     color: AppColors.textSecondary,
-    textAlign: 'center',
-    marginTop: 4,
-    lineHeight: 14,
+  },
+  footerLink: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppColors.primary,
   },
 });

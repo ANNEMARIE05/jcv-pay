@@ -47,6 +47,7 @@ export default function TresorerieScreen() {
   const user = useAuthStore((s) => s.user);
 
   const tresorerie = useFinanceStore((s) => s.tresorerieGlobale);
+  const geniusPaySolde = useFinanceStore((s) => s.geniusPaySolde);
   const transactions = useFinanceStore((s) => s.transactions);
   const projets = useFinanceStore((s) => s.projets);
   const mouvements = useFinanceStore((s) => s.mouvements);
@@ -511,6 +512,20 @@ export default function TresorerieScreen() {
                     {tresorerie.soldeCaissePhysique.toLocaleString('fr-FR')} F
                   </Text>
                 </View>
+                {geniusPaySolde != null ? (
+                  <>
+                    <View style={styles.divider} />
+                    <View style={styles.caissRow}>
+                      <View style={styles.caissLeft}>
+                        <Ionicons name="card" size={18} color={AppColors.primary} />
+                        <Text style={styles.caissTitle}>Compte GeniusPay</Text>
+                      </View>
+                      <Text style={styles.caissValue}>
+                        {geniusPaySolde.toLocaleString('fr-FR')} F
+                      </Text>
+                    </View>
+                  </>
+                ) : null}
               </Card>
             </View>
           </View>

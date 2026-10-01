@@ -41,6 +41,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const user = useAuthStore((s) => s.user);
 
   const tresorerie = useFinanceStore((s) => s.tresorerieGlobale);
+  const geniusPaySolde = useFinanceStore((s) => s.geniusPaySolde);
   const transactions = useFinanceStore((s) => s.transactions);
   const projets = useFinanceStore((s) => s.projets);
   const evenements = useFinanceStore((s) => s.evenements);
@@ -465,6 +466,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
               { label: 'Orange Money', value: tresorerie.soldeOrangeMoney },
               { label: 'Banque', value: tresorerie.soldeBancaire },
               { label: 'Espèces', value: tresorerie.soldeCaissePhysique },
+              ...(geniusPaySolde == null ? [] : [{ label: 'GeniusPay', value: geniusPaySolde }]),
             ].map((line) => (
               <View key={line.label} style={styles.caisseRow}>
                 <Text style={styles.caisseLabel}>{line.label}</Text>

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -19,8 +19,29 @@ import { useFinanceStore } from '@/store/financeStore';
 
 export default function RecuDetailScreen() {
   const { id, choix } = useLocalSearchParams<{ id: string; choix?: string }>();
-  const getReceiptById = useFinanceStore((s) => s.getReceiptById);
-  const recu = getReceiptById(id || '');
+  const loadReceipt = useFinanceStore((s) => s.loadReceipt);
+  const recu = useFinanceStore((s) =>
+    s.recus.find((item) => item.id === id || item.numeroRecu === id || item.transactionId === id)
+  );
+  const [loading, setLoading] = useState(!recu);
+
+  useEffect(() => {
+    if (!id || recu) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    loadReceipt(id)
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, loadReceipt, recu]);
+
   const showChoice = choix === '1' || recu?.statut === 'EN_ATTENTE';
 
   if (!recu) {
@@ -36,7 +57,11 @@ export default function RecuDetailScreen() {
         />
         <View style={styles.notFound}>
           <Ionicons name="receipt-outline" size={48} color={AppColors.textMuted} />
-          <Text style={styles.notFoundText}>Le reçu demandé n existe pas ou est en cours de traitement.</Text>
+          <Text style={styles.notFoundText}>
+            {loading
+              ? 'Chargement du reçu…'
+              : 'Le reçu demandé n existe pas ou est en cours de traitement.'}
+          </Text>
           <Button
             title="Retour à mes reçus"
             onPress={() => {
