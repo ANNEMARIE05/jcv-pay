@@ -28,7 +28,7 @@ export type TypeContribution =
   | 'EPARGNE'
   | 'LIBRE';
 
-export type StatutPaiement = 'VALIDE' | 'EN_ATTENTE' | 'REJETE' | 'ANNULE';
+export type StatutPaiement = 'VALIDE' | 'EN_ATTENTE' | 'REJETE' | 'ANNULE' | 'ECHEC';
 
 export type MoyenPaiement =
   | 'WAVE'

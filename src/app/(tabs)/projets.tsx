@@ -579,15 +579,16 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   contributeBtn: {
+    alignSelf: 'flex-start',
     marginTop: 10,
     backgroundColor: AppColors.primary,
-    paddingVertical: 11,
-    borderRadius: 12,
-    alignItems: 'center',
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 999,
   },
   contributeBtnText: {
     color: AppColors.white,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
   },
   pctText: {

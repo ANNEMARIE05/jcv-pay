@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.jcvpay.app",
+      "usesCleartextTraffic": true,
       "icon": "./assets/images/icon.png",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
@@ -35,6 +36,12 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "JCV Pay accède à vos photos pour définir votre photo de profil."
         }
       ]
     ],

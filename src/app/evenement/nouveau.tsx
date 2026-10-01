@@ -54,7 +54,7 @@ export default function NouvelEvenementScreen() {
       });
       Alert.alert(
         'Événement programmé',
-        'Les fidèles peuvent s inscrire depuis l onglet Événements.',
+        'Les membres peuvent s inscrire depuis l onglet Événements.',
         [{ text: 'OK', onPress: () => router.replace('/(tabs)/projets') }]
       );
     } catch (error) {

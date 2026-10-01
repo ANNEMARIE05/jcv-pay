@@ -5,11 +5,11 @@ export const ROLE_LABELS: Record<RoleUtilisateur, string> = {
   ADMINISTRATEUR: 'Administrateur',
   TRESORIER: 'Trésorier',
   RESPONSABLE: 'Responsable',
-  MEMBRE: 'Fidèle',
+  MEMBRE: 'Membre',
 };
 
 export const ASSIGNABLE_ROLES: { id: RoleUtilisateur; label: string; hint: string }[] = [
-  { id: 'MEMBRE', label: 'Fidèle', hint: 'Déclare ses versements et consulte ses reçus' },
+  { id: 'MEMBRE', label: 'Membre', hint: 'Déclare ses versements et consulte ses reçus' },
   { id: 'TRESORIER', label: 'Trésorier', hint: 'Confirme l argent, ouvre les caisses et les projets' },
   { id: 'ADMINISTRATEUR', label: 'Administrateur', hint: 'Crée les comptes, projets, caisses et attribue les rôles' },
 ];

@@ -1,6 +1,57 @@
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { tokenStorage } from '@/api/storage';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:4000';
+const API_PORT = 4000;
+const REQUEST_TIMEOUT_MS = 20_000;
+const CONFIGURED_URL = (process.env.EXPO_PUBLIC_API_URL || `http://localhost:${API_PORT}`).replace(/\/$/, '');
+
+function devMachineHost() {
+  const candidates = [
+    Constants.expoConfig?.hostUri,
+    Constants.expoGoConfig?.debuggerHost,
+    Constants.linkingUri,
+  ];
+  for (const value of candidates) {
+    const match = String(value || '').match(/(\d{1,3}(?:\.\d{1,3}){3})/);
+    if (match && match[1] !== '127.0.0.1') return match[1];
+  }
+  return null;
+}
+
+function configuredHostAndPort() {
+  try {
+    const url = new URL(CONFIGURED_URL);
+    return {
+      host: url.hostname,
+      port: url.port || String(API_PORT),
+    };
+  } catch {
+    return { host: 'localhost', port: String(API_PORT) };
+  }
+}
+
+export function getApiBaseUrl() {
+  const { host, port } = configuredHostAndPort();
+  const expoHost = devMachineHost();
+
+  if (host === 'localhost' || host === '127.0.0.1') {
+    if (expoHost) return `http://${expoHost}:${port}`;
+    if (Platform.OS === 'android') return `http://10.0.2.2:${port}`;
+    return CONFIGURED_URL;
+  }
+
+  // En dev sur téléphone : l’IPv4 du PC change — aligner sur l’IP du serveur Expo (même machine).
+  if (
+    expoHost &&
+    host !== expoHost &&
+    (host.startsWith('192.168.') || host.startsWith('10.') || host.startsWith('172.'))
+  ) {
+    return `http://${expoHost}:${port}`;
+  }
+
+  return CONFIGURED_URL;
+}
 
 const PUBLIC_AUTH = [
   '/api/auth/connexion',
@@ -25,10 +76,6 @@ function readMessage(body: { message?: unknown }) {
   return 'La requête a échoué.';
 }
 
-export function getApiBaseUrl() {
-  return BASE_URL;
-}
-
 export const api = {
   setToken(value: string | null) {
     token = value;
@@ -49,12 +96,28 @@ export const api = {
       ...(options.headers as Record<string, string>),
     };
     if (token) headers.Authorization = `Bearer ${token}`;
+
+    const url = `${getApiBaseUrl()}${path}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     let response: Response;
     try {
-      response = await fetch(`${BASE_URL}${path}`, { ...options, headers });
-    } catch {
-      throw new Error('Impossible de joindre le serveur JCV Pay.');
+      response = await fetch(url, { ...options, headers, signal: controller.signal });
+    } catch (error) {
+      const aborted = error instanceof Error && error.name === 'AbortError';
+      if (aborted) {
+        throw new Error(
+          `Le serveur ne répond pas (${getApiBaseUrl()}). Vérifiez que l’API tourne et que EXPO_PUBLIC_API_URL pointe vers la bonne IP (ipconfig).`
+        );
+      }
+      throw new Error(
+        `Impossible de joindre le serveur JCV Pay (${getApiBaseUrl()}). Même Wi‑Fi que le PC ? API démarrée ?`
+      );
+    } finally {
+      clearTimeout(timeoutId);
     }
+
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
       if (response.status === 401 && !PUBLIC_AUTH.some((item) => path.startsWith(item))) {

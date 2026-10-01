@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api, setUnauthorizedHandler } from '@/api/client';
+import { tokenStorage } from '@/api/storage';
 import { Utilisateur } from '@/types';
 import { applyEspace, EspacePayload } from '@/store/financeStore';
 
@@ -28,6 +29,7 @@ interface AuthState {
   resetPassword: (code: string, nouveauMotDePasse: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (updated: Partial<Utilisateur>) => Promise<void>;
+  updateAvatar: (avatar: string, previewUri?: string) => Promise<string>;
   bootstrap: () => Promise<void>;
 }
 
@@ -38,6 +40,17 @@ async function openSession(data: AuthResponse) {
 }
 
 let bootstrapTask: Promise<void> | null = null;
+
+const BOOTSTRAP_TIMEOUT_MS = 12_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error('bootstrap-timeout')), ms);
+    }),
+  ]);
+}
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
@@ -52,7 +65,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       try {
         const token = await api.restoreToken();
         if (!token) return;
-        const data = await api.get<{ utilisateur: Utilisateur; espace: EspacePayload }>('/api/auth/moi');
+        const data = await withTimeout(
+          api.get<{ utilisateur: Utilisateur; espace: EspacePayload }>('/api/auth/moi'),
+          BOOTSTRAP_TIMEOUT_MS
+        );
         applyEspace(data.espace);
         set({ user: data.utilisateur, isAuthenticated: true });
       } catch {
@@ -113,6 +129,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     );
     const data = await api.patch<{ utilisateur: Utilisateur }>('/api/auth/profil', payload);
     set({ user: data.utilisateur });
+  },
+
+  updateAvatar: async (avatar, previewUri) => {
+    const current = get().user;
+    if (!current) throw new Error('Connectez-vous pour modifier votre photo.');
+
+    const storageKey = `jcv_avatar_${current.id}`;
+    let savedUri = previewUri ?? avatar;
+
+    try {
+      const data = await api.patch<{ utilisateur: Utilisateur }>('/api/auth/profil', { avatar });
+      savedUri = data.utilisateur.avatar ?? savedUri;
+      set({ user: data.utilisateur });
+    } catch {
+      set({ user: { ...current, avatar: savedUri } });
+    }
+
+    await tokenStorage.set(storageKey, savedUri);
+    return savedUri;
   },
 }));
 

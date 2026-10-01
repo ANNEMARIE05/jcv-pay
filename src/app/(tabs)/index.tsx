@@ -23,6 +23,8 @@ import { useFinanceStore } from '@/store/financeStore';
 import { useNotificationStore } from '@/store/notificationStore';
 import { isStaff } from '@/constants/roles';
 import { AdminDashboard } from '@/app/admin-panel';
+import { ProfileAvatar } from '@/components/common/ProfileAvatar';
+import { useProfileAvatar } from '@/hooks/useProfileAvatar';
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
@@ -34,14 +36,33 @@ export default function HomeScreen() {
   const isAdmin = isStaff(user?.role);
 
   const unreadCount = useNotificationStore((s) => s.unreadCount);
-  const pendingCount = useFinanceStore(
-    (s) => s.transactions.filter((t) => t.statut === 'EN_ATTENTE').length
-  );
   const resume = useFinanceStore((s) => s.resume);
   const recus = useFinanceStore((s) => s.recus);
 
   const ready = useScreenReady(720);
-  const recusCount = recus.length;
+  const recusCount = recus.filter((r) => r.statut !== 'EN_ATTENTE').length;
+  const { displayUri } = useProfileAvatar();
+
+  const memberShortcuts = [
+    {
+      id: 'contrib',
+      label: 'Versement',
+      icon: 'add-circle-outline' as const,
+      route: '/contribution/nouvelle',
+    },
+    {
+      id: 'recus',
+      label: 'Mes reçus',
+      icon: 'receipt-outline' as const,
+      route: '/(tabs)/recus',
+    },
+    {
+      id: 'projets',
+      label: 'Projets',
+      icon: 'grid-outline' as const,
+      route: '/(tabs)/projets',
+    },
+  ];
 
   if (isAdmin) {
     return <AdminDashboard embedded />;
@@ -69,13 +90,7 @@ export default function HomeScreen() {
             onPress={() => router.push('/(tabs)/profil')}
             activeOpacity={0.8}
           >
-            <View style={styles.avatarCircle}>
-              <Ionicons
-                name={isAdmin ? 'shield-checkmark' : 'person'}
-                size={20}
-                color={isAdmin ? AppColors.accent : AppColors.primary}
-              />
-            </View>
+            <ProfileAvatar uri={displayUri} size={44} iconSize={20} style={styles.avatarCircle} />
             <View>
               <Text style={styles.greetingText}>Bonjour,</Text>
               <Text style={styles.userNameText} numberOfLines={1}>
@@ -109,8 +124,9 @@ export default function HomeScreen() {
         {/* Hero Section verte - Fait suite à la barre fixe et apporte le titre et la courbure */}
         <View style={styles.heroSection}>
           <View style={styles.heroTextContainer}>
-            <Text style={styles.heroTitle}>
-              Mon espace
+            <Text style={styles.heroTitle}>Mon espace</Text>
+            <Text style={styles.heroHint}>
+              Versements, reçus et projets de l’assemblée en un coup d’œil.
             </Text>
           </View>
         </View>
@@ -130,24 +146,12 @@ export default function HomeScreen() {
                 <Text style={styles.summaryValue}>{recusCount}</Text>
                 <Text style={styles.summaryLabel}>Reçus</Text>
               </View>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{pendingCount}</Text>
-                <Text style={styles.summaryLabel}>En attente</Text>
-              </View>
             </View>
           </Card>
 
-          <Text style={styles.blockTitle}>Accès rapide</Text>
+          <Text style={styles.blockTitle}>Actions rapides</Text>
           <View style={styles.shortcutGrid}>
-            {[
-              {
-                id: 'contrib',
-                label: 'Nouvelle contribution',
-                icon: 'heart-outline' as const,
-                route: '/contribution/nouvelle',
-              },
-            ].map((item) => (
+            {memberShortcuts.map((item) => (
               <TouchableOpacity
                 key={item.id}
                 style={styles.shortcutBtn}

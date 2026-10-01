@@ -7,37 +7,48 @@ import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { SearchBar } from '@/components/common/SearchBar';
 import { PaginationBar } from '@/components/common/PaginationBar';
-import { TabsSelector } from '@/components/common/TabsSelector';
 import { usePagedList } from '@/hooks/usePagedList';
 import { PayerSummary, useFinanceStore } from '@/store/financeStore';
 import { StatutPaiement, Transaction } from '@/types';
 import { ROLE_LABELS } from '@/constants/roles';
+import { MemberDetailModal } from '@/components/finance/MemberDetailModal';
 
-type ViewMode = 'PERSONNES' | 'VERSEMENTS';
+export type PayersDirectoryVariant = 'members' | 'history';
 
 const STATUS_LABEL: Record<StatutPaiement, string> = {
   VALIDE: 'Validé',
   EN_ATTENTE: 'Attente',
   REJETE: 'Rejeté',
-  ANNULE: 'Annulé',
+  ANNULE: 'Échec',
+  ECHEC: 'Échec',
 };
 
 function matchesQuery(haystack: string, query: string) {
   return haystack.toLowerCase().includes(query.trim().toLowerCase());
 }
 
-export function PayersDirectory() {
+function statusBadgeLabel(statut: StatutPaiement) {
+  if (statut === 'EN_ATTENTE') return 'En cours';
+  return STATUS_LABEL[statut];
+}
+
+type PayersDirectoryProps = {
+  variant: PayersDirectoryVariant;
+  canEditRole?: boolean;
+};
+
+export function PayersDirectory({ variant, canEditRole = false }: PayersDirectoryProps) {
   const transactions = useFinanceStore((s) => s.transactions);
   const utilisateurs = useFinanceStore((s) => s.utilisateurs);
+  const dernierAjoutId = useFinanceStore((s) => s.dernierAjoutId);
   const getPayersSummary = useFinanceStore((s) => s.getPayersSummary);
   const payers = useMemo(
     () => getPayersSummary(),
-    [getPayersSummary, transactions, utilisateurs]
+    [getPayersSummary, transactions, utilisateurs, dernierAjoutId]
   );
 
-  const [mode, setMode] = useState<ViewMode>('PERSONNES');
   const [query, setQuery] = useState('');
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [selectedMember, setSelectedMember] = useState<PayerSummary | null>(null);
 
   const filteredPeople = useMemo(() => {
     return payers.filter((p) => {
@@ -54,6 +65,7 @@ export function PayersDirectory() {
 
   const filteredTx = useMemo(() => {
     return transactions.filter((t) => {
+      if (t.statut === 'EN_ATTENTE') return false;
       const q = query.trim();
       return (
         !q ||
@@ -65,138 +77,120 @@ export function PayersDirectory() {
     });
   }, [transactions, query]);
 
-  const peoplePage = usePagedList(filteredPeople, 8, query);
+  const peoplePage = usePagedList(filteredPeople, 8, `${query}:${dernierAjoutId ?? ''}:${utilisateurs.length}`);
   const txPage = usePagedList(filteredTx, 8, query);
+
+  if (variant === 'history') {
+    return (
+      <View>
+        <View style={styles.searchWrap}>
+          <SearchBar value={query} onChange={setQuery} placeholder="Nom, titre, référence…" />
+        </View>
+        <Text style={styles.statLine}>{filteredTx.length} opération(s) enregistrée(s)</Text>
+        {txPage.pageItems.length === 0 ? (
+          <Text style={styles.empty}>Aucune transaction pour le moment.</Text>
+        ) : (
+          txPage.pageItems.map((tx) => <TxCard key={tx.id} tx={tx} />)
+        )}
+        <PaginationBar
+          page={txPage.page}
+          totalPages={txPage.totalPages}
+          total={txPage.total}
+          from={txPage.from}
+          to={txPage.to}
+          onPageChange={txPage.setPage}
+          label="transactions"
+        />
+      </View>
+    );
+  }
 
   return (
     <View>
-      <View style={styles.modeWrap}>
-        <TabsSelector
-          tabs={[
-            { id: 'PERSONNES', label: 'Fidèles', count: payers.length },
-            { id: 'VERSEMENTS', label: 'Versements', count: transactions.length },
-          ]}
-          activeTab={mode}
-          onChangeTab={setMode}
-          variant="segmented"
-        />
-      </View>
-
+      <Card style={styles.membersStatCard} variant="elevated">
+        <View style={styles.membersStatRow}>
+          <View style={styles.membersStatIcon}>
+            <Ionicons name="people" size={24} color={AppColors.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.membersStatLabel}>Total membres</Text>
+            <Text style={styles.membersStatValue}>{payers.length.toLocaleString('fr-FR')}</Text>
+            <Text style={styles.membersStatHint}>
+              {query.trim()
+                ? `${filteredPeople.length} résultat${filteredPeople.length > 1 ? 's' : ''} pour la recherche`
+                : 'Annuaire de l’assemblée'}
+            </Text>
+          </View>
+        </View>
+      </Card>
       <View style={styles.searchWrap}>
-        <SearchBar
-          value={query}
-          onChange={setQuery}
-          placeholder={
-            mode === 'PERSONNES'
-              ? 'Nom, téléphone, matricule…'
-              : 'Nom, titre, référence…'
-          }
-        />
+        <SearchBar value={query} onChange={setQuery} placeholder="Nom, téléphone, matricule…" />
       </View>
-
-      <Text style={styles.statLine}>{payers.length} fidèles dans l’assemblée</Text>
-
-      {mode === 'PERSONNES' ? (
-        <>
-          {peoplePage.pageItems.length === 0 ? (
-            <Text style={styles.empty}>Aucun fidèle ne correspond à la recherche.</Text>
-          ) : (
-            peoplePage.pageItems.map((p) => (
-              <PayerCard
-                key={p.key}
-                payer={p}
-                expanded={expanded === p.key}
-                onToggle={() => setExpanded(expanded === p.key ? null : p.key)}
-              />
-            ))
-          )}
-          <PaginationBar
-            page={peoplePage.page}
-            totalPages={peoplePage.totalPages}
-            total={peoplePage.total}
-            from={peoplePage.from}
-            to={peoplePage.to}
-            onPageChange={peoplePage.setPage}
-            label="fidèles"
-          />
-        </>
+      {peoplePage.pageItems.length === 0 ? (
+        <Text style={styles.empty}>Aucun membre ne correspond à la recherche.</Text>
       ) : (
-        <>
-          {txPage.pageItems.length === 0 ? (
-            <Text style={styles.empty}>Aucun versement pour le moment.</Text>
-          ) : (
-            txPage.pageItems.map((tx) => <TxCard key={tx.id} tx={tx} />)
-          )}
-          <PaginationBar
-            page={txPage.page}
-            totalPages={txPage.totalPages}
-            total={txPage.total}
-            from={txPage.from}
-            to={txPage.to}
-            onPageChange={txPage.setPage}
-            label="versements"
+        peoplePage.pageItems.map((p) => (
+          <MemberCard
+            key={p.key}
+            payer={p}
+            onPress={() => setSelectedMember(p)}
           />
-        </>
+        ))
       )}
+      <PaginationBar
+        page={peoplePage.page}
+        totalPages={peoplePage.totalPages}
+        total={peoplePage.total}
+        from={peoplePage.from}
+        to={peoplePage.to}
+        onPageChange={peoplePage.setPage}
+        label="membres"
+      />
+      <MemberDetailModal
+        member={selectedMember}
+        canEditRole={canEditRole}
+        onClose={() => setSelectedMember(null)}
+      />
     </View>
   );
 }
 
-function PayerCard({
-  payer,
-  expanded,
-  onToggle,
-}: {
-  payer: PayerSummary;
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const status =
-    payer.aPaye
-      ? 'A versé'
-      : payer.nbAttente > 0
-        ? 'En attente'
-        : payer.nbPaiements > 0
-          ? 'À revoir'
-          : 'Pas encore';
-  const variant =
-    payer.aPaye ? 'success' : payer.nbAttente > 0 ? 'warning' : payer.nbPaiements > 0 ? 'neutral' : 'neutral';
-
+function MemberCard({ payer, onPress }: { payer: PayerSummary; onPress: () => void }) {
   return (
-    <Card style={styles.payerCard} variant="elevated">
-      <TouchableOpacity style={styles.payerHeader} onPress={onToggle} activeOpacity={0.85}>
-        <View style={styles.payerAvatar}>
-          <Ionicons name="person" size={18} color={AppColors.primary} />
+    <TouchableOpacity onPress={onPress} activeOpacity={0.88}>
+      <Card style={styles.payerCard} variant="elevated">
+        <View style={styles.payerHeader}>
+          <View style={styles.payerAvatar}>
+            <Ionicons name="person" size={18} color={AppColors.primary} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 10 }}>
+            <Text style={styles.payerName}>{payer.nom}</Text>
+            <Text style={styles.payerMeta}>
+              {payer.telephone}
+              {payer.matricule ? ` • ${payer.matricule}` : ''}
+            </Text>
+            {payer.creeLe ? (
+              <Text style={styles.payerLast}>
+                Créé le {payer.creeLe}
+                {payer.creeA ? ` à ${payer.creeA}` : ''}
+              </Text>
+            ) : payer.dateAdhesion ? (
+              <Text style={styles.payerLast}>Adhésion : {payer.dateAdhesion}</Text>
+            ) : null}
+          </View>
+          <View style={{ alignItems: 'flex-end', gap: 6 }}>
+            {payer.role ? (
+              <Badge
+                label={ROLE_LABELS[payer.role]}
+                variant={payer.role === 'MEMBRE' ? 'neutral' : 'accent'}
+                size="sm"
+              />
+            ) : null}
+            <Ionicons name="chevron-forward" size={18} color={AppColors.textMuted} />
+          </View>
         </View>
-        <View style={{ flex: 1, marginLeft: 10 }}>
-          <Text style={styles.payerName}>{payer.nom}</Text>
-          <Text style={styles.payerMeta}>
-            {payer.telephone}
-            {payer.matricule ? ` • ${payer.matricule}` : ''}
-          </Text>
-          <Text style={styles.payerLast}>
-            {payer.role ? `${ROLE_LABELS[payer.role]} • ` : ''}
-            {payer.dernierPaiement}
-          </Text>
-        </View>
-        <View style={{ alignItems: 'flex-end', gap: 4 }}>
-          <Text style={styles.payerTotal}>{payer.totalPaye.toLocaleString('fr-FR')} F</Text>
-          <Badge label={status} variant={variant} size="sm" />
-        </View>
-      </TouchableOpacity>
-
-      {expanded ? (
-        <View style={styles.payerHistory}>
-          {payer.transactions.length === 0 ? (
-            <Text style={styles.emptySmall}>Aucun versement enregistré pour cette personne.</Text>
-          ) : (
-            payer.transactions.map((tx) => (
-              <TxRow key={tx.id} tx={tx} />
-            ))
-          )}
-        </View>
-      ) : null}
-    </Card>
+      </Card>
+    </TouchableOpacity>
   );
 }
 
@@ -225,10 +219,8 @@ function TxRow({ tx, showDonor = false }: { tx: Transaction; showDonor?: boolean
       <View style={{ alignItems: 'flex-end' }}>
         <Text style={styles.payerTxAmount}>{tx.montant.toLocaleString('fr-FR')} F</Text>
         <Badge
-          label={STATUS_LABEL[tx.statut]}
-          variant={
-            tx.statut === 'VALIDE' ? 'success' : tx.statut === 'EN_ATTENTE' ? 'warning' : 'neutral'
-          }
+          label={statusBadgeLabel(tx.statut)}
+          variant={tx.statut === 'VALIDE' ? 'success' : 'danger'}
           size="sm"
         />
       </View>
@@ -237,7 +229,42 @@ function TxRow({ tx, showDonor = false }: { tx: Transaction; showDonor?: boolean
 }
 
 const styles = StyleSheet.create({
-  modeWrap: { marginBottom: 12 },
+  membersStatCard: {
+    padding: 16,
+    borderRadius: 18,
+    marginBottom: 14,
+  },
+  membersStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  membersStatIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: AppColors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  membersStatLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: AppColors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  membersStatValue: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: AppColors.primary,
+    marginTop: 2,
+  },
+  membersStatHint: {
+    fontSize: 12,
+    color: AppColors.textMuted,
+    marginTop: 4,
+  },
   searchWrap: { marginBottom: 10 },
   statLine: {
     fontSize: 13,
@@ -250,11 +277,6 @@ const styles = StyleSheet.create({
     color: AppColors.textMuted,
     fontSize: 13,
     paddingVertical: 24,
-  },
-  emptySmall: {
-    fontSize: 12,
-    color: AppColors.textMuted,
-    paddingVertical: 8,
   },
   payerCard: {
     padding: 12,
@@ -287,18 +309,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: AppColors.textMuted,
     marginTop: 2,
-  },
-  payerTotal: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: AppColors.primary,
-  },
-  payerHistory: {
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: AppColors.borderLight,
-    paddingTop: 8,
-    gap: 6,
   },
   payerTxRow: {
     flexDirection: 'row',

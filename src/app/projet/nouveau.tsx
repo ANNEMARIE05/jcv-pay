@@ -65,7 +65,7 @@ export default function NouveauProjetScreen() {
       });
       Alert.alert(
         'Projet publié',
-        'Une caisse liée a été ouverte. Les fidèles le voient dans l onglet Projets.',
+        'Une caisse liée a été ouverte. Les membres le voient dans l onglet Projets.',
         [{ text: 'OK', onPress: () => router.replace('/(tabs)/projets') }]
       );
     } catch (error) {
@@ -80,7 +80,7 @@ export default function NouveauProjetScreen() {
       header={
         <Header
           title="Nouveau projet"
-          subtitle="Visible par tous les fidèles"
+          subtitle="Visible par tous les membres"
           showBack
           variant="curved"
         />

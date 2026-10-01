@@ -9,6 +9,7 @@ import {
   Platform,
   StatusBar,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -21,7 +22,9 @@ import { useAuthStore } from '@/store/authStore';
 import { HomeSkeleton } from '@/components/motion/Skeleton';
 import { FadeInView } from '@/components/motion/FadeIn';
 import { useScreenReady } from '@/hooks/useScreenReady';
-import { ROLE_LABELS, canManageCampaigns } from '@/constants/roles';
+import { ROLE_LABELS, canManageCampaigns, canManagePeople } from '@/constants/roles';
+import { ProfileAvatar } from '@/components/common/ProfileAvatar';
+import { useProfileAvatar } from '@/hooks/useProfileAvatar';
 
 interface ProfileMenuItem {
   id: string;
@@ -44,12 +47,14 @@ export default function ProfilScreen() {
   const logout = useAuthStore((s) => s.logout);
   const changePassword = useAuthStore((s) => s.changePassword);
   const staff = canManageCampaigns(user?.role);
+  const canPeople = canManagePeople(user?.role);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
 
   const ready = useScreenReady(520);
+  const { displayUri, pickAndUpload, uploading } = useProfileAvatar();
 
   const handleLogout = () => {
     Alert.alert(
@@ -85,7 +90,7 @@ export default function ProfilScreen() {
               {
                 id: 'new-caisse',
                 title: 'Ouvrir une caisse',
-                subtitle: 'Visible par les fidèles',
+                subtitle: 'Visible par les membres',
                 icon: 'wallet-outline',
                 route: '/caisse/nouvelle',
               },
@@ -95,13 +100,17 @@ export default function ProfilScreen() {
                 icon: 'calendar-outline',
                 route: '/evenement/nouveau',
               },
-              {
-                id: 'payers',
-                title: 'Les fidèles',
-                subtitle: 'Annuaire de l’assemblée',
-                icon: 'people-outline',
-                route: '/(tabs)/payeurs',
-              },
+              ...(canPeople
+                ? [
+                    {
+                      id: 'payers',
+                      title: 'Les membres',
+                      subtitle: 'Annuaire de l’assemblée',
+                      icon: 'people-outline' as const,
+                      route: '/(tabs)/payeurs',
+                    },
+                  ]
+                : []),
               {
                 id: 'treasury',
                 title: 'Trésorerie',
@@ -199,20 +208,36 @@ export default function ProfilScreen() {
             <View style={{ width: 40 }} />
           </View>
 
-          <View style={styles.avatarWrapper}>
-            <View style={styles.avatarCircle}>
-              <Ionicons name="person" size={44} color={AppColors.primary} />
+          <TouchableOpacity
+            style={styles.avatarWrapper}
+            onPress={pickAndUpload}
+            disabled={uploading}
+            activeOpacity={0.85}
+            accessibilityLabel="Changer la photo de profil"
+          >
+            <ProfileAvatar
+              uri={displayUri}
+              size={84}
+              style={styles.avatarCircle}
+            />
+            <View style={styles.avatarEditBadge}>
+              {uploading ? (
+                <ActivityIndicator size="small" color={AppColors.white} />
+              ) : (
+                <Ionicons name="camera" size={14} color={AppColors.white} />
+              )}
             </View>
             <View style={styles.badgeChurch}>
               <Ionicons name="checkmark" size={14} color={AppColors.white} />
             </View>
-          </View>
+          </TouchableOpacity>
+          <Text style={styles.avatarHint}>Appuyez pour ajouter ou modifier votre photo</Text>
 
           <Text style={styles.profileName}>
             {user ? `${user.prenom} ${user.nom}`.trim() : 'Membre'}
           </Text>
           <Text style={styles.profileRole}>
-            {user ? ROLE_LABELS[user.role] : 'Fidèle'}
+            {user ? ROLE_LABELS[user.role] : 'Membre'}
           </Text>
         </View>
 
@@ -387,15 +412,28 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   avatarCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: AppColors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
     borderWidth: 3,
     borderColor: 'rgba(255, 255, 255, 0.4)',
     ...Shadows.medium,
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: AppColors.white,
+  },
+  avatarHint: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.75)',
+    marginBottom: 4,
+    textAlign: 'center',
   },
   badgeChurch: {
     position: 'absolute',

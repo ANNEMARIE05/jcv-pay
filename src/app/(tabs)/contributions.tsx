@@ -372,18 +372,6 @@ export default function ContributionsScreen() {
       </ScrollView>
       )}
 
-      {/* Floating CTA Button for quick new contribution */}
-      <View style={styles.floatingContainer}>
-        <TouchableOpacity
-          style={styles.floatingBtn}
-          onPress={() => router.push('/contribution/nouvelle')}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="heart" size={20} color={AppColors.accent} />
-          <Text style={styles.floatingBtnText}>Faire un don ou offrande libre</Text>
-          <Ionicons name="chevron-forward" size={18} color={AppColors.white} />
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }
@@ -784,30 +772,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: AppColors.success,
-  },
-  floatingContainer: {
-    position: 'absolute',
-    bottom: 16,
-    left: 20,
-    right: 20,
-  },
-  floatingBtn: {
-    backgroundColor: AppColors.primary,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 28,
-    shadowColor: AppColors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  floatingBtnText: {
-    color: AppColors.white,
-    fontSize: 14,
-    fontWeight: '700',
   },
 });

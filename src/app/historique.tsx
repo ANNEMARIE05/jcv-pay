@@ -35,7 +35,7 @@ const CATEGORY_FILTERS = [
 const STATUS_FILTERS = [
   { id: 'TOUS', label: 'Tous les statuts' },
   { id: 'VALIDE', label: 'Validés' },
-  { id: 'EN_ATTENTE', label: 'En attente' },
+  { id: 'ECHEC', label: 'Échecs' },
 ];
 
 export default function HistoriqueScreen() {
@@ -52,12 +52,20 @@ export default function HistoriqueScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const ready = useScreenReady(580);
 
+  const visibleTransactions = useMemo(
+    () => transactions.filter((t) => t.statut !== 'EN_ATTENTE'),
+    [transactions]
+  );
+
   const filteredTransactions = useMemo(() => {
-    return transactions.filter((t) => {
+    return visibleTransactions.filter((t) => {
       const matchCategory =
         activeCategory === 'TOUS' || t.type === activeCategory;
       const matchStatus =
-        activeStatus === 'TOUS' || t.statut === activeStatus;
+        activeStatus === 'TOUS' ||
+        t.statut === activeStatus ||
+        (activeStatus === 'ECHEC' &&
+          (t.statut === 'ECHEC' || t.statut === 'REJETE' || t.statut === 'ANNULE'));
       const matchQuery =
         t.titre.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -66,7 +74,7 @@ export default function HistoriqueScreen() {
 
       return matchCategory && matchStatus && matchQuery;
     });
-  }, [transactions, activeCategory, activeStatus, searchQuery]);
+  }, [visibleTransactions, activeCategory, activeStatus, searchQuery]);
 
   const totalFilteredAmount = useMemo(() => {
     return filteredTransactions
@@ -113,7 +121,7 @@ export default function HistoriqueScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
       >
-        {transactions.length > 0 ? (
+        {visibleTransactions.length > 0 ? (
         <View style={styles.summaryContainer}>
           <Card style={styles.summaryCard} variant="elevated">
             <View style={styles.summaryHeader}>
@@ -132,20 +140,22 @@ export default function HistoriqueScreen() {
             <View style={styles.summaryStatsRow}>
               <View style={styles.statBox}>
                 <Text style={styles.statLabel}>Opérations</Text>
-                <Text style={styles.statVal}>{transactions.length}</Text>
+                <Text style={styles.statVal}>{visibleTransactions.length}</Text>
               </View>
               <View style={styles.statSep} />
               <View style={styles.statBox}>
                 <Text style={styles.statLabel}>Validées</Text>
                 <Text style={[styles.statVal, { color: AppColors.success }]}>
-                  {transactions.filter((t) => t.statut === 'VALIDE').length}
+                  {visibleTransactions.filter((t) => t.statut === 'VALIDE').length}
                 </Text>
               </View>
               <View style={styles.statSep} />
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>En attente</Text>
-                <Text style={[styles.statVal, { color: AppColors.warning }]}>
-                  {transactions.filter((t) => t.statut === 'EN_ATTENTE').length}
+                <Text style={styles.statLabel}>Échecs</Text>
+                <Text style={[styles.statVal, { color: AppColors.danger }]}>
+                  {visibleTransactions.filter((t) =>
+                    t.statut === 'ECHEC' || t.statut === 'REJETE' || t.statut === 'ANNULE'
+                  ).length}
                 </Text>
               </View>
             </View>
@@ -241,8 +251,14 @@ export default function HistoriqueScreen() {
                       <Text style={styles.txTypeTagText}>{tx.type}</Text>
                     </View>
                     <Badge
-                      label={isValid ? 'Validé' : 'En attente'}
-                      variant={isValid ? 'success' : 'warning'}
+                      label={
+                        tx.statut === 'VALIDE'
+                          ? 'Validé'
+                          : tx.statut === 'REJETE'
+                            ? 'Rejeté'
+                            : 'Échec de paiement'
+                      }
+                      variant={tx.statut === 'VALIDE' ? 'success' : 'danger'}
                       size="sm"
                     />
                   </View>

@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   rightSlot: {
-    width: 44,
+    minWidth: 44,
     alignItems: 'flex-end',
     justifyContent: 'center',
   },

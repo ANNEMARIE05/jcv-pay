@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { Redirect, Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
@@ -7,6 +8,7 @@ import { AppColors } from '@/constants/colors';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
 import { canManageMoney, canManagePeople, isStaff } from '@/constants/roles';
+import { PaymentFab } from '@/components/navigation/PaymentFab';
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
@@ -34,6 +36,7 @@ export default function TabsLayout() {
   const barHeight = 56 + bottomInset;
 
   return (
+    <View style={styles.root}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -86,14 +89,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="contributions"
         options={{
-          title: 'Contributions',
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={focused ? 'wallet' : 'wallet-outline'}
-              size={22}
-              color={color}
-            />
-          ),
+          href: null,
         }}
       />
 
@@ -122,8 +118,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="payeurs"
         options={{
-          title: 'Fidèles',
-          href: staff ? undefined : null,
+          title: 'Membres',
+          href: isAdmin ? undefined : null,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               name={focused ? 'people' : 'people-outline'}
@@ -137,10 +133,10 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="recus"
         options={{
-          title: 'Mes Reçus',
+          title: staff ? 'Transactions' : 'Mes Reçus',
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
-              name={focused ? 'receipt' : 'receipt-outline'}
+              name={staff ? (focused ? 'swap-horizontal' : 'swap-horizontal-outline') : focused ? 'receipt' : 'receipt-outline'}
               size={22}
               color={color}
             />
@@ -162,5 +158,11 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    <PaymentFab />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});

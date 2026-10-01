@@ -27,6 +27,7 @@ import { ProgressBar } from '@/components/common/ProgressBar';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
 import { CaisseDesk } from '@/components/finance/CaisseDesk';
+import { AccountCreatedModal, CreatedAccount } from '@/components/finance/AccountCreatedModal';
 import { ASSIGNABLE_ROLES, ROLE_LABELS, canManageCampaigns, canManageMoney, canManagePeople } from '@/constants/roles';
 import { RoleUtilisateur, SourceCaisse } from '@/types';
 
@@ -41,7 +42,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const user = useAuthStore((s) => s.user);
 
   const tresorerie = useFinanceStore((s) => s.tresorerieGlobale);
-  const geniusPaySolde = useFinanceStore((s) => s.geniusPaySolde);
   const transactions = useFinanceStore((s) => s.transactions);
   const projets = useFinanceStore((s) => s.projets);
   const evenements = useFinanceStore((s) => s.evenements);
@@ -55,7 +55,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const addCotisation = useFinanceStore((s) => s.addCotisation);
   const recordCashPayment = useFinanceStore((s) => s.recordCashPayment);
   const recordWithdrawal = useFinanceStore((s) => s.recordWithdrawal);
-  const mouvements = useFinanceStore((s) => s.mouvements);
   const utilisateurs = useFinanceStore((s) => s.utilisateurs);
   const addUser = useFinanceStore((s) => s.addUser);
   const updateUserRole = useFinanceStore((s) => s.updateUserRole);
@@ -121,6 +120,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPhone, setNewUserPhone] = useState('+225 ');
   const [newUserRole, setNewUserRole] = useState<RoleUtilisateur>('MEMBRE');
+  const [createdAccount, setCreatedAccount] = useState<CreatedAccount | null>(null);
 
   const pendingPayments = transactions.filter((t) => t.statut === 'EN_ATTENTE');
   const projetsOuverts = projets.filter((p) => p.statut !== 'CLOTURE');
@@ -196,7 +196,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
       setNewProjGoal('');
       setNewProjDesc('');
       setActiveTab('PROJETS');
-      Alert.alert('Projet créé avec succès !', 'Le projet est désormais visible par tous les fidèles sur l application.');
+      Alert.alert('Projet créé avec succès !', 'Le projet est désormais visible par tous les membres sur l application.');
     } catch (error) {
       Alert.alert('Projet non créé', error instanceof Error ? error.message : 'Réessayez.');
     }
@@ -227,7 +227,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
       setNewEventTitle('');
       setNewEventDesc('');
       setActiveTab('EVENEMENTS');
-      Alert.alert('Événement programmé !', 'Les fidèles peuvent dès maintenant s inscrire et réserver leurs pass.');
+      Alert.alert('Événement programmé !', 'Les membres peuvent dès maintenant s inscrire et réserver leurs pass.');
     } catch (error) {
       Alert.alert('Événement non créé', error instanceof Error ? error.message : 'Réessayez.');
     }
@@ -260,7 +260,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   // Submit Cash
   const handleCreateCashPayment = async () => {
     if (!cashDonorName.trim() || !cashAmount.trim()) {
-      Alert.alert('Erreur', 'Veuillez saisir le nom du fidèle et le montant en espèces.');
+      Alert.alert('Erreur', 'Veuillez saisir le nom du membre et le montant en espèces.');
       return;
     }
     if (cashType === 'PROJET' && !cashProjetId) {
@@ -316,10 +316,13 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
       setNewUserPhone('+225 ');
       setNewUserRole('MEMBRE');
       setActiveTab('MEMBRES');
-      Alert.alert(
-        'Compte créé',
-        `${created.prenom} ${created.nom} se connecte avec le numéro ${created.telephone} et le mot de passe temporaire ${created.motDePasseTemporaire}.`
-      );
+      setCreatedAccount({
+        prenom: created.prenom,
+        nom: created.nom,
+        telephone: created.telephone,
+        roleLabel: ROLE_LABELS[created.role] ?? ROLE_LABELS[newUserRole],
+        motDePasseTemporaire: created.motDePasseTemporaire,
+      });
     } catch (error) {
       Alert.alert('Compte non créé', error instanceof Error ? error.message : 'Réessayez.');
     }
@@ -459,35 +462,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
               </Card>
             </View>
           </View>
-
-          <Card style={styles.caisseCard}>
-            {[
-              { label: 'Wave', value: tresorerie.soldeWave },
-              { label: 'Orange Money', value: tresorerie.soldeOrangeMoney },
-              { label: 'Banque', value: tresorerie.soldeBancaire },
-              { label: 'Espèces', value: tresorerie.soldeCaissePhysique },
-              ...(geniusPaySolde == null ? [] : [{ label: 'GeniusPay', value: geniusPaySolde }]),
-            ].map((line) => (
-              <View key={line.label} style={styles.caisseRow}>
-                <Text style={styles.caisseLabel}>{line.label}</Text>
-                <Text style={styles.caisseValue}>{line.value.toLocaleString('fr-FR')} F</Text>
-              </View>
-            ))}
-            <TouchableOpacity
-              style={styles.withdrawLink}
-              onPress={() => setShowWithdrawModal(true)}
-              activeOpacity={0.85}
-            >
-              <Ionicons name="arrow-down-circle-outline" size={18} color="#EF4444" />
-              <Text style={styles.withdrawLinkText}>Noter une sortie de caisse</Text>
-            </TouchableOpacity>
-            {mouvements.slice(0, 3).map((mv) => (
-              <Text key={mv.id} style={styles.mouvementLine}>
-                {mv.type === 'SORTIE' ? '−' : '+'}
-                {mv.montant.toLocaleString('fr-FR')} F · {mv.motif}
-              </Text>
-            ))}
-          </Card>
         </View>
         ) : null}
 
@@ -562,10 +536,11 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                 <Ionicons name="person-add-outline" size={22} color="#0284C7" />
               </View>
               <Text style={styles.actionBtnTitle}>Nouveau compte</Text>
-              <Text style={styles.actionBtnDesc}>Fidèle, trésorier ou admin</Text>
+              <Text style={styles.actionBtnDesc}>Membre, trésorier ou admin</Text>
             </TouchableOpacity>
             ) : null}
 
+            {people ? (
             <TouchableOpacity
               style={styles.actionGridBtn}
               onPress={() => router.push('/(tabs)/payeurs')}
@@ -574,9 +549,10 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
               <View style={[styles.actionBtnIconCircle, { backgroundColor: '#E0F2FE' }]}>
                 <Ionicons name="people-outline" size={22} color="#0284C7" />
               </View>
-              <Text style={styles.actionBtnTitle}>Les fidèles</Text>
+              <Text style={styles.actionBtnTitle}>Les membres</Text>
               <Text style={styles.actionBtnDesc}>Annuaire de l’assemblée</Text>
             </TouchableOpacity>
+            ) : null}
 
             {money ? (
             <TouchableOpacity
@@ -676,14 +652,14 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                 <Ionicons name="checkmark-done-circle-outline" size={48} color={AppColors.success} />
                 <Text style={styles.emptyTitle}>Rien à confirmer</Text>
                 <Text style={styles.emptySub}>
-                  Quand un fidèle déclare un versement Wave, Orange Money, virement ou espèces, il apparaît ici.
+                  Quand un membre déclare un versement Wave, Orange Money, virement ou espèces, il apparaît ici.
                 </Text>
               </Card>
             ) : (
               pendingPayments.map((tx) => (
                 <Card key={tx.id} style={styles.pendingCard} variant="elevated">
                   <View style={styles.pendingTop}>
-                    <Badge label="En attente" variant="warning" size="sm" />
+                    <Badge label="À valider" variant="warning" size="sm" />
                     <Text style={styles.pendingDate}>
                       {tx.date} • {tx.heure}
                     </Text>
@@ -1175,7 +1151,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                 onChangeText={setNewCotisTitle}
               />
 
-              <Text style={styles.inputLabel}>Montant par Fidèle (FCFA) *</Text>
+              <Text style={styles.inputLabel}>Montant par Membre (FCFA) *</Text>
               <TextInput
                 style={styles.modalInput}
                 onFocus={scrollInputIntoView}
@@ -1229,7 +1205,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
             >
-              <Text style={styles.inputLabel}>Nom & Prénom du Fidèle *</Text>
+              <Text style={styles.inputLabel}>Nom & Prénom du Membre *</Text>
               <TextInput
                 style={styles.modalInput}
                 onFocus={scrollInputIntoView}
@@ -1238,7 +1214,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                 onChangeText={setCashDonorName}
               />
 
-              <Text style={styles.inputLabel}>Téléphone du Fidèle</Text>
+              <Text style={styles.inputLabel}>Téléphone du Membre</Text>
               <TextInput
                 style={styles.modalInput}
                 onFocus={scrollInputIntoView}
@@ -1548,6 +1524,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
           </View>
         </View>
       </Modal>
+      <AccountCreatedModal account={createdAccount} onClose={() => setCreatedAccount(null)} />
     </View>
   );
 }

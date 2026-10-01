@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Alert,
   Modal,
   Platform,
@@ -12,15 +11,18 @@ import { useLocalSearchParams, router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { AppColors, Shadows } from '@/constants/colors';
+import { AppColors } from '@/constants/colors';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { useFinanceStore } from '@/store/financeStore';
-import { MoyenPaiement, TypeContribution } from '@/types';
+import { TypeContribution } from '@/types';
 import { BrandedLoader } from '@/components/motion/BrandedLoader';
 import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 import { VERSEMENT_CHANNELS } from '@/constants/versement';
+
+const DEFAULT_ONLINE_METHOD =
+  VERSEMENT_CHANNELS.find((channel) => channel.geniusPay)?.id ?? 'WAVE';
 
 export default function PaiementScreen() {
   const insets = useSafeAreaInsets();
@@ -42,15 +44,21 @@ export default function PaiementScreen() {
   const processPayment = useFinanceStore((s) => s.processPayment);
   const syncPayment = useFinanceStore((s) => s.syncPayment);
 
-  const [selectedMethod, setSelectedMethod] = useState<MoyenPaiement>('WAVE');
   const [isProcessing, setIsProcessing] = useState(false);
-  const selectedChannel = VERSEMENT_CHANNELS.find((method) => method.id === selectedMethod);
 
   const amount = parseInt(params.montant || '25000', 10);
   const titre = params.titre || 'Contribution Financière';
   const type = (params.type as TypeContribution) || 'DIME';
   const donateurNom = params.donateurNom || 'Ezekiel';
   const phoneForPayment = params.donateurTelephone || '+225 07 48 92 10 33';
+
+  const paymentErrorMessage = (error: unknown) => {
+    const message = error instanceof Error ? error.message : '';
+    if (/geniuspay|GENIUSPAY|pk_|sk_|PUBLIC_KEY|SECRET_KEY/i.test(message)) {
+      return 'Le paiement en ligne n’est pas encore disponible. La trésorerie doit finaliser la connexion GeniusPay sur le serveur.';
+    }
+    return message || 'Le paiement n’a pas pu être effectué.';
+  };
 
   const handleDeclare = async () => {
     setIsProcessing(true);
@@ -59,7 +67,7 @@ export default function PaiementScreen() {
         titre,
         type,
         montant: amount,
-        moyenPaiement: selectedMethod,
+        moyenPaiement: DEFAULT_ONLINE_METHOD,
         donateurNom,
         donateurTelephone: phoneForPayment,
         projetId: params.projetId,
@@ -68,13 +76,28 @@ export default function PaiementScreen() {
       });
       if (result.checkoutUrl) {
         await WebBrowser.openBrowserAsync(result.checkoutUrl);
-        await syncPayment(result.transactionId);
+        const syncedTx = await syncPayment(result.transactionId);
+        setIsProcessing(false);
+        if (syncedTx?.statut === 'ECHEC') {
+          Alert.alert(
+            'Échec de paiement',
+            'Le paiement n’a pas pu être effectué. Aucun montant n’a été débité.',
+            [
+              { text: 'Réessayer', style: 'cancel' },
+              {
+                text: 'Voir le reçu',
+                onPress: () => router.replace(`/recu/${result.recu.id}`),
+              },
+            ]
+          );
+          return;
+        }
       }
       setIsProcessing(false);
       router.replace(`/recu/${result.recu.id}?choix=1`);
     } catch (error) {
       setIsProcessing(false);
-      Alert.alert('Paiement impossible', error instanceof Error ? error.message : 'Réessayez.');
+      Alert.alert('Échec de paiement', paymentErrorMessage(error));
     }
   };
 
@@ -84,8 +107,8 @@ export default function PaiementScreen() {
       contentContainerStyle={styles.scrollContent}
       header={
         <Header
-          title="Comment verser"
-          subtitle="Wave, Orange, MTN, Moov ou carte"
+          title="Paiement"
+          subtitle="Vérifiez le récapitulatif avant de continuer"
           showBack
           onBack={() => {
             if (router.canGoBack()) router.back();
@@ -103,10 +126,11 @@ export default function PaiementScreen() {
             </Text>
           </View>
           <Button
-            title={selectedChannel?.geniusPay ? 'Payer avec GeniusPay' : 'J ai noté, déclarer'}
+            title="Effectuer un paiement"
             onPress={handleDeclare}
-            size="lg"
+            size="md"
             variant="primary"
+            fullWidth={false}
             style={styles.payBtn}
           />
         </View>
@@ -116,16 +140,15 @@ export default function PaiementScreen() {
           <View style={styles.modalOverlay}>
             <View style={styles.modalCard}>
               <BrandedLoader
-                title="Enregistrement..."
-                subtitle="Votre déclaration est transmise à la trésorerie"
-                hint="Le reçu officiel arrive après confirmation du versement"
+                title="Paiement en cours…"
+                subtitle="Préparation de la page de paiement sécurisée"
+                hint="Revenez dans JCV Pay une fois le versement terminé pour consulter votre reçu"
               />
             </View>
           </View>
         </Modal>
       }
     >
-        {/* Order Details Card (Screen 10 Booking Details) */}
         <View style={styles.cardContainer}>
           <Card style={styles.summaryCard} variant="elevated">
             <View style={styles.categoryPill}>
@@ -134,7 +157,6 @@ export default function PaiementScreen() {
 
             <Text style={styles.orderTitle}>{titre}</Text>
 
-            {/* Contributor Row */}
             <View style={styles.contributorBox}>
               <View style={styles.contributorRow}>
                 <Ionicons name="person-circle-outline" size={20} color={AppColors.primary} />
@@ -155,78 +177,18 @@ export default function PaiementScreen() {
               </View>
               <View style={styles.totalDivider} />
               <Text style={styles.phoneHint}>
-                {selectedChannel?.geniusPay
-                  ? 'Wave, Orange, MTN, Moov et carte sont encaissés par GeniusPay. Le reçu se met à jour dès confirmation.'
-                  : 'Ce canal est déclaré dans l’application. La trésorerie confirme ensuite le reçu officiel.'}
+                Vous serez redirigé vers une page sécurisée pour finaliser le versement. Le reçu
+                officiel apparaît dans l’application dès confirmation.
               </Text>
             </View>
           </Card>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Comment verser</Text>
-          <Text style={styles.sectionSubtitle}>
-            Les moyens électroniques ouvrent GeniusPay. Virement et espèces restent une déclaration.
-          </Text>
-
-          <View style={styles.methodsList}>
-            {VERSEMENT_CHANNELS.map((method) => {
-              const isSelected = selectedMethod === method.id;
-              return (
-                <TouchableOpacity
-                  key={method.id}
-                  style={[styles.methodCard, isSelected && styles.methodCardSelected]}
-                  onPress={() => setSelectedMethod(method.id)}
-                  activeOpacity={0.8}
-                >
-                  <View
-                    style={[
-                      styles.methodIconBadge,
-                      { backgroundColor: isSelected ? AppColors.primaryMuted : '#F1F5F9' },
-                    ]}
-                  >
-                    <Ionicons
-                      name={method.icon}
-                      size={22}
-                      color={isSelected ? AppColors.primary : AppColors.textSecondary}
-                    />
-                  </View>
-
-                  <View style={styles.methodInfo}>
-                    <Text
-                      style={[
-                        styles.methodName,
-                        isSelected && styles.methodNameSelected,
-                      ]}
-                    >
-                      {method.name}
-                    </Text>
-                    <Text style={styles.methodBadge}>{method.detail}</Text>
-                    {isSelected ? (
-                      <Text style={styles.methodHow}>{method.how}</Text>
-                    ) : null}
-                  </View>
-
-                  <View
-                    style={[
-                      styles.radioCircle,
-                      isSelected && styles.radioCircleSelected,
-                    ]}
-                  >
-                    {isSelected && <View style={styles.radioDot} />}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
         <View style={styles.securityRow}>
-          <Ionicons name="information-circle" size={18} color={AppColors.primary} />
+          <Ionicons name="shield-checkmark-outline" size={18} color={AppColors.primary} />
           <Text style={styles.securityText}>
-            {selectedChannel?.geniusPay
-              ? 'Le paiement est traité par GeniusPay. Revenez dans JCV Pay après la page de checkout.'
-              : 'Après votre versement, un trésorier le confirme. Le reçu officiel apparaît alors.'}
+            Votre versement est enregistré par la trésorerie de l’assemblée. Conservez le reçu
+            affiché à la fin.
           </Text>
         </View>
     </KeyboardAwareScreen>
@@ -238,9 +200,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: AppColors.background,
   },
-  scroll: {
-    flex: 1,
-  },
   scrollContent: {
     paddingBottom: 120,
   },
@@ -250,7 +209,7 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     padding: 20,
-    borderRadius: 24,
+    borderRadius: 22,
   },
   categoryPill: {
     alignSelf: 'flex-start',
@@ -258,7 +217,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 10,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   categoryPillText: {
     fontSize: 11,
@@ -266,7 +225,7 @@ const styles = StyleSheet.create({
     color: AppColors.primary,
   },
   orderTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '800',
     color: AppColors.textPrimary,
     marginBottom: 14,
@@ -276,7 +235,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
     gap: 6,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   contributorRow: {
     flexDirection: 'row',
@@ -284,12 +243,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   contributorName: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: AppColors.textPrimary,
   },
   contributorPhone: {
-    fontSize: 12,
+    fontSize: 13,
     color: AppColors.textSecondary,
   },
   breakdownTable: {
@@ -305,203 +264,73 @@ const styles = StyleSheet.create({
     color: AppColors.textSecondary,
   },
   breakdownValue: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: AppColors.textPrimary,
-  },
-  breakdownValueGreen: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: AppColors.success,
+    fontSize: 16,
+    fontWeight: '800',
+    color: AppColors.primary,
   },
   totalDivider: {
     height: 1,
     backgroundColor: AppColors.borderLight,
     marginVertical: 4,
   },
-  totalRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 4,
-  },
-  totalLabel: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: AppColors.primary,
-  },
-  totalValue: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: AppColors.primary,
-  },
-  section: {
-    paddingHorizontal: 20,
-    marginTop: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: AppColors.textPrimary,
-  },
-  sectionSubtitle: {
-    fontSize: 12,
-    color: AppColors.textSecondary,
-    marginTop: 2,
-    marginBottom: 14,
-  },
-  methodsList: {
-    gap: 10,
-  },
-  methodCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: AppColors.white,
-    padding: 14,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: AppColors.border,
-  },
-  methodCardSelected: {
-    borderColor: AppColors.primary,
-    backgroundColor: AppColors.primaryMuted,
-  },
-  methodIconBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  methodInfo: {
-    flex: 1,
-  },
-  methodName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: AppColors.textPrimary,
-  },
-  methodNameSelected: {
-    color: AppColors.primary,
-  },
-  methodBadge: {
-    fontSize: 11,
-    color: AppColors.textSecondary,
-    marginTop: 2,
-  },
-  methodHow: {
-    fontSize: 11,
-    color: AppColors.primary,
-    marginTop: 6,
-    lineHeight: 15,
-  },
-  radioCircle: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: AppColors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioCircleSelected: {
-    borderColor: AppColors.primary,
-  },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: AppColors.primary,
-  },
-  phoneSection: {
-    paddingHorizontal: 20,
-    marginTop: 16,
-  },
-  phoneCard: {
-    padding: 16,
-    borderRadius: 16,
-  },
-  phoneCardTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: AppColors.textPrimary,
-    marginBottom: 8,
-  },
   phoneHint: {
-    fontSize: 11,
+    fontSize: 12,
     color: AppColors.textMuted,
-    marginTop: 6,
-    lineHeight: 15,
+    lineHeight: 18,
   },
   securityRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 8,
-    paddingHorizontal: 24,
-    marginTop: 18,
+    marginHorizontal: 20,
+    marginTop: 20,
+    padding: 14,
+    backgroundColor: AppColors.primaryMuted,
+    borderRadius: 14,
   },
   securityText: {
-    fontSize: 11,
-    color: AppColors.textSecondary,
     flex: 1,
-    lineHeight: 16,
+    fontSize: 12,
+    color: AppColors.textSecondary,
+    lineHeight: 18,
   },
   bottomBar: {
-    backgroundColor: AppColors.white,
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: AppColors.borderLight,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: AppColors.white,
+    borderTopWidth: 1,
+    borderTopColor: AppColors.borderLight,
   },
   bottomTotalLabel: {
     fontSize: 11,
-    color: AppColors.textSecondary,
+    color: AppColors.textMuted,
   },
   bottomTotalAmount: {
     fontSize: 18,
     fontWeight: '800',
     color: AppColors.primary,
-    marginTop: 1,
   },
   payBtn: {
-    width: '56%',
+    flexShrink: 1,
+    maxWidth: 168,
+    paddingHorizontal: 14,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
   },
   modalCard: {
-    backgroundColor: AppColors.white,
-    borderRadius: 24,
-    padding: 28,
-    alignItems: 'center',
     width: '100%',
-    maxWidth: 320,
-    ...Shadows.ticket,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: AppColors.textPrimary,
-    marginTop: 18,
-    marginBottom: 6,
-  },
-  modalSubtitle: {
-    fontSize: 13,
-    color: AppColors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  modalHint: {
-    fontSize: 11,
-    color: AppColors.textMuted,
-    marginTop: 12,
+    maxWidth: 340,
+    backgroundColor: AppColors.white,
+    borderRadius: 20,
+    padding: 20,
   },
 });

@@ -16,21 +16,42 @@ import { SearchBar } from '@/components/common/SearchBar';
 import { PaginationBar } from '@/components/common/PaginationBar';
 import { usePagedList } from '@/hooks/usePagedList';
 import { useFinanceStore } from '@/store/financeStore';
+import { useAuthStore } from '@/store/authStore';
+import { isStaff } from '@/constants/roles';
 import { TicketSkeleton } from '@/components/motion/Skeleton';
 import { FadeInView } from '@/components/motion/FadeIn';
 import { useScreenReady } from '@/hooks/useScreenReady';
+import { Card } from '@/components/common/Card';
+
+type StatusTab = 'TOUS' | 'VALIDE' | 'ECHEC';
 
 export default function RecusScreen() {
+  const user = useAuthStore((s) => s.user);
+  const staff = isStaff(user?.role);
   const recus = useFinanceStore((s) => s.recus);
+  const transactions = useFinanceStore((s) => s.transactions);
 
-  const [activeTab, setActiveTab] = useState<'TOUS' | 'VALIDE' | 'EN_ATTENTE'>('TOUS');
+  const [activeTab, setActiveTab] = useState<StatusTab>('TOUS');
   const [searchQuery, setSearchQuery] = useState('');
   const ready = useScreenReady(560);
 
+  const visibleRecus = useMemo(
+    () => recus.filter((r) => r.statut !== 'EN_ATTENTE'),
+    [recus]
+  );
+
+  const visibleTransactions = useMemo(
+    () => transactions.filter((t) => t.statut !== 'EN_ATTENTE'),
+    [transactions]
+  );
+
   const filteredRecus = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    return recus.filter((r) => {
-      const statusOk = activeTab === 'TOUS' || r.statut === activeTab;
+    return visibleRecus.filter((r) => {
+      const statusOk =
+        activeTab === 'TOUS' ||
+        r.statut === activeTab ||
+        (activeTab === 'ECHEC' && (r.statut === 'ECHEC' || r.statut === 'REJETE' || r.statut === 'ANNULE'));
       const searchOk =
         !q ||
         r.titre.toLowerCase().includes(q) ||
@@ -39,17 +60,38 @@ export default function RecusScreen() {
         r.donateurTelephone.toLowerCase().includes(q);
       return statusOk && searchOk;
     });
-  }, [recus, activeTab, searchQuery]);
+  }, [visibleRecus, activeTab, searchQuery]);
 
-  const page = usePagedList(filteredRecus, 8, `${activeTab}|${searchQuery}`);
+  const filteredTransactions = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return visibleTransactions.filter((t) => {
+      const statusOk =
+        activeTab === 'TOUS' ||
+        t.statut === activeTab ||
+        (activeTab === 'ECHEC' && (t.statut === 'ECHEC' || t.statut === 'REJETE' || t.statut === 'ANNULE'));
+      const searchOk =
+        !q ||
+        t.titre.toLowerCase().includes(q) ||
+        t.donateurNom.toLowerCase().includes(q) ||
+        t.reference.toLowerCase().includes(q) ||
+        (t.recuNumero && t.recuNumero.toLowerCase().includes(q)) ||
+        t.donateurTelephone.toLowerCase().includes(q);
+      return statusOk && searchOk;
+    });
+  }, [visibleTransactions, activeTab, searchQuery]);
+
+  const recuPage = usePagedList(filteredRecus, 8, `recu|${activeTab}|${searchQuery}`);
+  const txPage = usePagedList(filteredTransactions, 8, `tx|${activeTab}|${searchQuery}`);
+  const page = staff ? txPage : recuPage;
+  const listCount = staff ? filteredTransactions.length : filteredRecus.length;
 
   return (
     <View style={styles.container}>
       {/* Deep Teal Header (Screen 13 style) */}
       <Header
-        title="Reçus"
-        showBack
-        onBack={() => router.replace('/(tabs)')}
+        title={staff ? 'Transactions' : 'Reçus'}
+        showBack={staff}
+        onBack={staff ? () => router.replace('/(tabs)') : undefined}
         variant="curved"
       />
 
@@ -64,26 +106,57 @@ export default function RecusScreen() {
       >
         {/* Segmented Filter Bar (Screen 13 tabs: Ongoing, Completed, Canceled) */}
         <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={styles.calendarBanner}
+            onPress={() => router.push('/calendrier')}
+            activeOpacity={0.88}
+          >
+            <View style={styles.calendarBannerIcon}>
+              <Ionicons name="calendar" size={22} color={AppColors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.calendarBannerTitle}>Calendrier des cultes</Text>
+              <Text style={styles.calendarBannerSub}>
+                Voir les dates et faire un versement lié à un événement
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={AppColors.textMuted} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.tabsContainer}>
           <SearchBar
             value={searchQuery}
             onChange={setSearchQuery}
-            placeholder="Rechercher un reçu, un nom, un n°…"
+            placeholder={staff ? 'Rechercher une transaction, un nom…' : 'Rechercher un reçu, un nom, un n°…'}
           />
         </View>
 
         <View style={styles.tabsContainer}>
           <TabsSelector
             tabs={[
-              { id: 'TOUS', label: 'Tous', count: recus.length },
+              {
+                id: 'TOUS',
+                label: 'Tous',
+                count: staff ? visibleTransactions.length : visibleRecus.length,
+              },
               {
                 id: 'VALIDE',
                 label: 'Validés',
-                count: recus.filter((r) => r.statut === 'VALIDE').length,
+                count: staff
+                  ? visibleTransactions.filter((t) => t.statut === 'VALIDE').length
+                  : visibleRecus.filter((r) => r.statut === 'VALIDE').length,
               },
               {
-                id: 'EN_ATTENTE',
-                label: 'En attente',
-                count: recus.filter((r) => r.statut === 'EN_ATTENTE').length,
+                id: 'ECHEC',
+                label: 'Échecs',
+                count: staff
+                  ? visibleTransactions.filter((t) =>
+                      t.statut === 'ECHEC' || t.statut === 'REJETE' || t.statut === 'ANNULE'
+                    ).length
+                  : visibleRecus.filter((r) =>
+                      r.statut === 'ECHEC' || r.statut === 'REJETE' || r.statut === 'ANNULE'
+                    ).length,
               },
             ]}
             activeTab={activeTab}
@@ -94,18 +167,42 @@ export default function RecusScreen() {
 
         {/* List of Ticket Cards (Authentic train ticket style from Screen 13) */}
         <View style={styles.ticketsList}>
-          {filteredRecus.length === 0 ? (
+          {listCount === 0 ? (
             <View style={styles.emptyContainer}>
-              <Ionicons name="receipt-outline" size={48} color={AppColors.textMuted} />
-              <Text style={styles.emptyTitle}>Aucun reçu trouvé</Text>
+              <Ionicons name={staff ? 'swap-horizontal-outline' : 'receipt-outline'} size={48} color={AppColors.textMuted} />
+              <Text style={styles.emptyTitle}>{staff ? 'Aucune transaction trouvée' : 'Aucun reçu trouvé'}</Text>
               <Text style={styles.emptySubtitle}>
-                Vos futurs paiements et cotisations apparaîtront ici.
+                {staff
+                  ? 'Les versements enregistrés apparaîtront ici.'
+                  : 'Vos futurs paiements et cotisations apparaîtront ici.'}
               </Text>
             </View>
+          ) : staff ? (
+            txPage.pageItems.map((tx, i) => (
+              <FadeInView key={tx.id} index={i}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => router.push(`/recu/${tx.id}`)}
+                >
+                  <Card style={styles.staffTxCard} variant="elevated">
+                    <View style={styles.staffTxTop}>
+                      <Text style={styles.contributionTitle}>{tx.titre}</Text>
+                      <Badge
+                        label={tx.statut === 'VALIDE' ? 'Validé' : 'Échec'}
+                        variant={tx.statut === 'VALIDE' ? 'success' : 'danger'}
+                        size="sm"
+                      />
+                    </View>
+                    <Text style={styles.label}>{tx.donateurNom}</Text>
+                    <Text style={styles.val}>
+                      {tx.date} • {tx.heure} • {tx.montant.toLocaleString('fr-FR')} FCFA
+                    </Text>
+                  </Card>
+                </TouchableOpacity>
+              </FadeInView>
+            ))
           ) : (
-            page.pageItems.map((recu, i) => {
-              const isValid = recu.statut === 'VALIDE';
-
+            recuPage.pageItems.map((recu, i) => {
               return (
                 <FadeInView key={recu.id} index={i}>
                 <TouchableOpacity
@@ -126,8 +223,18 @@ export default function RecusScreen() {
                       </View>
                     </View>
                     <Badge
-                      label={isValid ? 'Validé' : 'En attente'}
-                      variant={isValid ? 'success' : 'warning'}
+                      label={
+                        recu.statut === 'VALIDE'
+                          ? 'Validé'
+                          : recu.statut === 'REJETE'
+                            ? 'Rejeté'
+                            : 'Échec de paiement'
+                      }
+                      variant={
+                        recu.statut === 'VALIDE'
+                          ? 'success'
+                          : 'danger'
+                      }
                       size="sm"
                     />
                   </View>
@@ -183,7 +290,7 @@ export default function RecusScreen() {
             from={page.from}
             to={page.to}
             onPageChange={page.setPage}
-            label="reçus"
+            label={staff ? 'transactions' : 'reçus'}
           />
         </View>
       </ScrollView>
@@ -208,9 +315,50 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     marginBottom: 16,
   },
+  calendarBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: AppColors.white,
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: AppColors.borderLight,
+  },
+  calendarBannerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: AppColors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: AppColors.textPrimary,
+  },
+  calendarBannerSub: {
+    fontSize: 11,
+    color: AppColors.textSecondary,
+    marginTop: 2,
+    lineHeight: 15,
+  },
   ticketsList: {
     paddingHorizontal: 20,
     gap: 16,
+  },
+  staffTxCard: {
+    padding: 16,
+    borderRadius: 18,
+    marginBottom: 4,
+  },
+  staffTxTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginBottom: 6,
   },
   ticketCard: {
     backgroundColor: AppColors.white,

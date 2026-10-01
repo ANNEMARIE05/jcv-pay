@@ -114,7 +114,7 @@ export default function NouvelleContributionScreen() {
           showBack
           onBack={() => {
             if (router.canGoBack()) router.back();
-            else router.replace('/(tabs)/contributions');
+            else router.replace('/(tabs)');
           }}
           variant="curved"
         />
@@ -128,10 +128,11 @@ export default function NouvelleContributionScreen() {
             </Text>
           </View>
           <Button
-            title="Voir comment verser"
+            title="Passer au paiement"
             onPress={handleProceed}
-            size="lg"
+            size="md"
             variant="primary"
+            fullWidth={false}
             style={styles.bottomBtn}
           />
         </View>
@@ -534,6 +535,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   bottomBtn: {
-    width: '50%',
+    flexShrink: 1,
+    maxWidth: 168,
+    paddingHorizontal: 14,
   },
 });

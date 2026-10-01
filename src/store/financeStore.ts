@@ -18,13 +18,27 @@ import {
 } from '@/types';
 import { useNotificationStore } from '@/store/notificationStore';
 
+export interface MembreTrace {
+  date: string;
+  heure: string;
+  motDePasseTemporaire?: string;
+}
+
 export interface PayerSummary {
   key: string;
   nom: string;
+  prenom?: string;
+  nomFamille?: string;
   telephone: string;
   email?: string;
   matricule?: string;
+  paroisse?: string;
+  departement?: string;
+  dateAdhesion?: string;
+  creeLe?: string;
+  creeA?: string;
   role?: RoleUtilisateur;
+  userId?: string;
   totalPaye: number;
   totalDeclare: number;
   nbPaiements: number;
@@ -88,13 +102,15 @@ interface FinanceState {
   mouvements: MouvementCaisse[];
   caissesProjet: CaisseProjet[];
   utilisateurs: Utilisateur[];
+  membresTrace: Record<string, MembreTrace>;
+  dernierAjoutId: string | null;
   tresorerieGlobale: typeof emptyTreasury;
   geniusPaySolde: number | null;
   refreshEspace: (role?: RoleUtilisateur) => Promise<void>;
   loadReceipt: (id: string) => Promise<Recu>;
   loadGeniusPay: () => Promise<number | null>;
   processPayment: (payload: NewPaymentPayload) => Promise<{ recu: Recu; checkoutUrl?: string | null; transactionId: string }>;
-  syncPayment: (transactionId: string) => Promise<void>;
+  syncPayment: (transactionId: string) => Promise<Transaction | undefined>;
   recordCashPayment: (payload: {
     donateurNom: string;
     donateurTelephone: string;
@@ -141,11 +157,39 @@ interface FinanceState {
     departement?: string;
   }) => Promise<Utilisateur & { motDePasseTemporaire?: string }>;
   updateUserRole: (userId: string, role: RoleUtilisateur) => Promise<void>;
-  addFidele: (payload: { prenom: string; nom: string; telephone: string }) => Promise<Utilisateur & { motDePasseTemporaire?: string }>;
+  addFidele: (payload: {
+    prenom: string;
+    nom: string;
+    telephone: string;
+    role: RoleUtilisateur;
+  }) => Promise<Utilisateur & { motDePasseTemporaire?: string }>;
+  resendMemberAccess: (userId: string) => Promise<string | undefined>;
+  getMembreTrace: (userId: string) => MembreTrace | undefined;
+}
+
+function mergeUtilisateurs(
+  current: Utilisateur[],
+  incoming: Utilisateur[],
+  pinnedId: string | null
+): Utilisateur[] {
+  const merged = new Map<string, Utilisateur>();
+  incoming.forEach((u) => merged.set(u.id, u));
+  current.forEach((u) => {
+    if (!merged.has(u.id)) merged.set(u.id, u);
+  });
+  let list = Array.from(merged.values());
+  if (pinnedId) {
+    const idx = list.findIndex((u) => u.id === pinnedId);
+    if (idx > 0) {
+      const [pinned] = list.splice(idx, 1);
+      list = [pinned, ...list];
+    }
+  }
+  return list;
 }
 
 export function applyEspace(espace: EspacePayload) {
-  useFinanceStore.setState({
+  useFinanceStore.setState((state) => ({
     resume: espace.resume,
     transactions: espace.transactions,
     projets: espace.projets,
@@ -154,15 +198,46 @@ export function applyEspace(espace: EspacePayload) {
     cotisations: espace.cotisations,
     mouvements: espace.mouvements,
     caissesProjet: espace.caissesProjet,
-    utilisateurs: espace.utilisateurs,
+    utilisateurs: mergeUtilisateurs(state.utilisateurs, espace.utilisateurs ?? [], state.dernierAjoutId),
     tresorerieGlobale: espace.tresorerieGlobale,
-  });
+  }));
   if (espace.notifications) {
     useNotificationStore.setState({
       notifications: espace.notifications,
       unreadCount: espace.notifications.filter((item) => !item.lue).length,
     });
   }
+}
+
+function creationStamp() {
+  const now = new Date();
+  return {
+    date: now.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }),
+    heure: now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+  };
+}
+
+function rememberUtilisateur(user: Utilisateur & { motDePasseTemporaire?: string }) {
+  const { motDePasseTemporaire, ...safe } = user;
+  const stamp = creationStamp();
+  useFinanceStore.setState((state) => {
+    const previous = state.membresTrace[safe.id];
+    const trace: MembreTrace = previous
+      ? {
+          ...previous,
+          ...(motDePasseTemporaire?.trim() ? { motDePasseTemporaire: motDePasseTemporaire.trim() } : {}),
+        }
+      : {
+          date: stamp.date,
+          heure: stamp.heure,
+          ...(motDePasseTemporaire?.trim() ? { motDePasseTemporaire: motDePasseTemporaire.trim() } : {}),
+        };
+    return {
+      dernierAjoutId: safe.id,
+      utilisateurs: [safe, ...(state.utilisateurs ?? []).filter((item) => item.id !== safe.id)],
+      membresTrace: { ...state.membresTrace, [safe.id]: trace },
+    };
+  });
 }
 
 function readGeniusPaySolde(payload: unknown): number | null {
@@ -207,6 +282,8 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
   mouvements: [],
   caissesProjet: [],
   utilisateurs: [],
+  membresTrace: {},
+  dernierAjoutId: null,
   tresorerieGlobale: emptyTreasury,
   geniusPaySolde: null,
 
@@ -259,8 +336,11 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
   },
 
   syncPayment: async (transactionId) => {
-    const data = await api.post<{ espace: EspacePayload }>(`/api/paiements/${transactionId}/synchroniser`);
+    const data = await api.post<{ espace: EspacePayload; transaction?: Transaction }>(
+      `/api/paiements/${transactionId}/synchroniser`
+    );
     applyEspace(data.espace);
+    return data.transaction;
   },
 
   recordCashPayment: async (payload) => {
@@ -323,21 +403,66 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
     );
   },
 
+  getMembreTrace: (userId) => get().membresTrace[userId],
+
+  resendMemberAccess: async (userId) => {
+    const state = get();
+    const member = state.utilisateurs.find((u) => u.id === userId);
+    if (!member) {
+      throw new Error('Membre introuvable.');
+    }
+    let password: string | undefined;
+    try {
+      const data = await api.post<{ motDePasseTemporaire?: string }>(
+        `/api/utilisateurs/${encodeURIComponent(userId)}/renvoyer-acces`
+      );
+      password = data.motDePasseTemporaire?.trim();
+    } catch {
+      try {
+        const data = await api.post<{ motDePasseTemporaire?: string }>(
+          `/api/fideles/${encodeURIComponent(userId)}/renvoyer-acces`
+        );
+        password = data.motDePasseTemporaire?.trim();
+      } catch {
+        password = state.membresTrace[userId]?.motDePasseTemporaire;
+      }
+    }
+    if (password) {
+      const trace = state.membresTrace[userId] ?? creationStamp();
+      useFinanceStore.setState({
+        membresTrace: {
+          ...state.membresTrace,
+          [userId]: { ...trace, motDePasseTemporaire: password },
+        },
+      });
+    }
+    return password;
+  },
+
   getPayersSummary: () => {
-    const { transactions, utilisateurs } = get();
+    const { transactions, utilisateurs, membresTrace } = get();
     const map = new Map<string, PayerSummary>();
     const makeKey = (phone: string, fallback: string) => normalizePhone(phone) || fallback.trim().toLowerCase();
 
     utilisateurs.forEach((u) => {
       const nom = `${u.prenom} ${u.nom}`.trim();
       const key = makeKey(u.telephone, u.id);
+      const trace = membresTrace[u.id];
       map.set(key, {
         key,
         nom,
+        prenom: u.prenom,
+        nomFamille: u.nom,
         telephone: u.telephone,
         email: u.email,
         matricule: u.matricule,
+        paroisse: u.paroisse,
+        departement: u.departement,
+        dateAdhesion: u.dateAdhesion,
+        creeLe: trace?.date,
+        creeA: trace?.heure,
         role: u.role,
+        userId: u.id,
         totalPaye: 0,
         totalDeclare: 0,
         nbPaiements: 0,
@@ -387,7 +512,10 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
       map.set(key, row);
     });
 
+    const pinned = get().dernierAjoutId;
     return Array.from(map.values()).sort((a, b) => {
+      if (pinned && a.userId === pinned) return -1;
+      if (pinned && b.userId === pinned) return 1;
       if (a.aPaye !== b.aPaye) return a.aPaye ? -1 : 1;
       if (b.totalPaye !== a.totalPaye) return b.totalPaye - a.totalPaye;
       return a.nom.localeCompare(b.nom, 'fr');
@@ -416,6 +544,10 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
       espace: EspacePayload;
     }>('/api/utilisateurs', payload);
     applyEspace(data.espace);
+    rememberUtilisateur({
+      ...data.utilisateur,
+      motDePasseTemporaire: data.utilisateur.motDePasseTemporaire,
+    });
     return data.utilisateur;
   },
 
@@ -424,12 +556,23 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
     applyEspace(espace);
   },
 
-  addFidele: async ({ prenom, nom, telephone }) => {
+  addFidele: async ({ prenom, nom, telephone, role }) => {
     const data = await api.post<{
       utilisateur: Utilisateur & { motDePasseTemporaire?: string };
       espace: EspacePayload;
-    }>('/api/fideles', { prenom, nom, telephone });
+    }>('/api/fideles', { prenom, nom, telephone, role });
     applyEspace(data.espace);
-    return data.utilisateur;
+    const created = data.utilisateur.role === role
+      ? data.utilisateur
+      : { ...data.utilisateur, role };
+    if (data.utilisateur.role !== role) {
+      const espace = await api.patch<EspacePayload>(`/api/utilisateurs/${data.utilisateur.id}/role`, { role });
+      applyEspace(espace);
+    }
+    rememberUtilisateur({
+      ...created,
+      motDePasseTemporaire: data.utilisateur.motDePasseTemporaire ?? created.motDePasseTemporaire,
+    });
+    return created;
   },
 }));

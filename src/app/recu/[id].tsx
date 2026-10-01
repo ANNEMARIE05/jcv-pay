@@ -135,8 +135,22 @@ export default function RecuDetailScreen() {
                   <Text style={styles.churchAddress}>{recu.egliseAdresse}</Text>
                 </View>
                 <Badge
-                  label={recu.statut === 'VALIDE' ? 'Validé' : recu.statut === 'REJETE' ? 'Rejeté' : 'En attente'}
-                  variant={recu.statut === 'VALIDE' ? 'success' : recu.statut === 'REJETE' ? 'danger' : 'warning'}
+                  label={
+                    recu.statut === 'VALIDE'
+                      ? 'Validé'
+                      : recu.statut === 'EN_ATTENTE'
+                        ? 'En attente'
+                        : recu.statut === 'REJETE'
+                          ? 'Rejeté'
+                          : 'Échec de paiement'
+                  }
+                  variant={
+                    recu.statut === 'VALIDE'
+                      ? 'success'
+                      : recu.statut === 'ECHEC' || recu.statut === 'REJETE' || recu.statut === 'ANNULE'
+                        ? 'danger'
+                        : 'warning'
+                  }
                   size="sm"
                 />
               </View>
@@ -231,7 +245,11 @@ export default function RecuDetailScreen() {
               <Text style={styles.stampText}>
                 {recu.statut === 'VALIDE'
                   ? 'Document certifié conforme par la trésorerie'
-                  : 'Déclaration enregistrée. Le reçu officiel sera disponible après confirmation du versement.'}
+                  : recu.statut === 'EN_ATTENTE'
+                    ? 'Déclaration enregistrée. Le reçu officiel sera disponible après confirmation du versement.'
+                    : recu.statut === 'REJETE'
+                      ? 'Ce versement a été rejeté par la trésorerie.'
+                      : 'Le paiement n’a pas pu être effectué (échec de paiement). Aucun montant n’a été débité.'}
               </Text>
             </View>
           </View>
@@ -239,19 +257,32 @@ export default function RecuDetailScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
-          {showChoice ? (
+          {showChoice || recu.statut === 'ECHEC' ? (
             <View style={styles.choiceBox}>
-              <Text style={styles.choiceTitle}>Où aller ensuite ?</Text>
+              <Text style={styles.choiceTitle}>
+                {recu.statut === 'ECHEC' ? 'Paiement non abouti' : 'Où aller ensuite ?'}
+              </Text>
               <Text style={styles.choiceHint}>
                 {recu.statut === 'VALIDE'
                   ? 'Votre reçu est prêt.'
-                  : 'Versez l argent hors de l appli. La trésorerie confirmera, puis le reçu passera en validé.'}
+                  : recu.statut === 'ECHEC'
+                    ? 'Le paiement n’a pas pu être effectué. Vous pouvez retenter votre versement dès maintenant.'
+                    : 'Versez l argent hors de l appli. La trésorerie confirmera, puis le reçu passera en validé.'}
               </Text>
+              {recu.statut === 'ECHEC' ? (
+                <Button
+                  title="Réessayer un versement"
+                  onPress={() => router.replace('/(tabs)')}
+                  size="lg"
+                  variant="primary"
+                  style={styles.actionBtn}
+                />
+              ) : null}
               <Button
                 title="Retour à l accueil"
                 onPress={() => router.replace('/(tabs)')}
                 size="lg"
-                variant="primary"
+                variant={recu.statut === 'ECHEC' ? 'outline' : 'primary'}
                 style={styles.actionBtn}
               />
               <Button

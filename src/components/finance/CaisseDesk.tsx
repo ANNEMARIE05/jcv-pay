@@ -147,19 +147,35 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
           const reste = caisse.montantCollecte;
           return (
             <Card key={caisse.id} style={styles.card} variant="elevated">
-              <Text style={styles.cardTitle}>{caisse.nom}</Text>
-              {caisse.description ? <Text style={styles.cardDesc}>{caisse.description}</Text> : null}
+              <Text style={styles.cardTitle} numberOfLines={2}>
+                {caisse.nom}
+              </Text>
+              {caisse.description ? (
+                <Text style={styles.cardDesc} numberOfLines={3}>
+                  {caisse.description}
+                </Text>
+              ) : null}
               <Text style={styles.cardAmount}>{reste.toLocaleString('fr-FR')} FCFA</Text>
-              <View style={styles.row}>
-                <TouchableOpacity style={styles.transferBtn} onPress={() => openTransfer(caisse.id)} activeOpacity={0.85}>
+
+              <View style={styles.actionsRow}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.transferBtn]}
+                  onPress={() => openTransfer(caisse.id)}
+                  activeOpacity={0.85}
+                >
                   <Ionicons name="swap-horizontal" size={16} color={AppColors.primary} />
                   <Text style={styles.transferBtnText}>Transférer</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => confirmDelete(caisse)} activeOpacity={0.85}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.deleteBtn]}
+                  onPress={() => confirmDelete(caisse)}
+                  activeOpacity={0.85}
+                >
                   <Ionicons name="trash-outline" size={16} color={AppColors.danger} />
                   <Text style={styles.deleteBtnText}>Supprimer</Text>
                 </TouchableOpacity>
               </View>
+
               {allowContribute && caisse.statut !== 'TERMINEE' ? (
                 <TouchableOpacity
                   style={styles.contributeBtn}
@@ -176,7 +192,7 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
                   }
                   activeOpacity={0.85}
                 >
-                  <Ionicons name="heart" size={16} color={AppColors.white} />
+                  <Ionicons name="heart" size={18} color={AppColors.white} />
                   <Text style={styles.contributeBtnText}>Contribuer</Text>
                 </TouchableOpacity>
               ) : null}
@@ -276,45 +292,52 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 8,
   },
-  card: { padding: 14, borderRadius: 18, marginBottom: 10 },
-  cardTitle: { fontSize: 16, fontWeight: '800', color: AppColors.textPrimary },
-  cardDesc: { fontSize: 13, color: AppColors.textSecondary, marginTop: 4, lineHeight: 18 },
-  cardAmount: { fontSize: 18, fontWeight: '800', color: AppColors.primary, marginTop: 8 },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  transferBtn: {
+  card: { padding: 16, borderRadius: 18, marginBottom: 12, gap: 0 },
+  cardTitle: { fontSize: 16, fontWeight: '800', color: AppColors.textPrimary, lineHeight: 22 },
+  cardDesc: { fontSize: 13, color: AppColors.textSecondary, marginTop: 6, lineHeight: 18 },
+  cardAmount: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: AppColors.primary,
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  actionBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
-    alignSelf: 'flex-start',
-    marginTop: 12,
-    backgroundColor: AppColors.primaryMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
     borderRadius: 12,
+    minHeight: 44,
+  },
+  transferBtn: {
+    backgroundColor: AppColors.primaryMuted,
   },
   transferBtnText: { color: AppColors.primary, fontWeight: '700', fontSize: 13 },
   deleteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
     backgroundColor: AppColors.dangerLight,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
   },
   deleteBtnText: { color: AppColors.danger, fontWeight: '700', fontSize: 13 },
   contributeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    alignSelf: 'flex-start',
     gap: 6,
-    marginTop: 12,
+    marginTop: 10,
     backgroundColor: AppColors.primary,
-    paddingVertical: 11,
-    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 999,
   },
-  contributeBtnText: { color: AppColors.white, fontWeight: '800', fontSize: 13 },
+  contributeBtnText: { color: AppColors.white, fontWeight: '700', fontSize: 13 },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',

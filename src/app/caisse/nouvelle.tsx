@@ -51,7 +51,7 @@ export default function NouvelleCaisseScreen() {
       });
       Alert.alert(
         'Caisse ouverte',
-        'Les fidèles la voient dans l onglet Caisses et peuvent y contribuer.',
+        'Les membres la voient dans l onglet Caisses et peuvent y contribuer.',
         [{ text: 'OK', onPress: () => router.replace('/(tabs)/projets') }]
       );
     } catch (error) {

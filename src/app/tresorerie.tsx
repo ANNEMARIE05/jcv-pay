@@ -47,7 +47,6 @@ export default function TresorerieScreen() {
   const user = useAuthStore((s) => s.user);
 
   const tresorerie = useFinanceStore((s) => s.tresorerieGlobale);
-  const geniusPaySolde = useFinanceStore((s) => s.geniusPaySolde);
   const transactions = useFinanceStore((s) => s.transactions);
   const projets = useFinanceStore((s) => s.projets);
   const mouvements = useFinanceStore((s) => s.mouvements);
@@ -300,7 +299,7 @@ export default function TresorerieScreen() {
               <Text style={styles.soldeCurrency}>FCFA</Text>
             </Text>
             <Text style={styles.soldeHint}>
-              {payers.length} fidèles • {validatedPayments.length} versements confirmés •{' '}
+              {payers.length} membres • {validatedPayments.length} versements confirmés •{' '}
               {utilisateurs.filter((u) => u.role === 'MEMBRE').length} membres inscrits
             </Text>
           </Card>
@@ -355,11 +354,11 @@ export default function TresorerieScreen() {
           >
             {[
               { id: 'VUE_GLOBALE', label: 'Vue globale' },
-              { id: 'PAYEURS', label: `Fidèles (${payers.length})` },
+              { id: 'PAYEURS', label: `Membres (${payers.length})` },
               { id: 'JOURNAL', label: 'Journal caisse' },
               { id: 'CAISSES', label: 'Caisses' },
               { id: 'VALIDATIONS', label: `Validations (${pendingPayments.length})` },
-              { id: 'ENCAISSEMENTS', label: `Reçus (${validatedPayments.length})` },
+              { id: 'ENCAISSEMENTS', label: `Transactions (${validatedPayments.length})` },
             ].map((tab) => {
               const isActive = activeTab === tab.id;
               return (
@@ -428,7 +427,7 @@ export default function TresorerieScreen() {
                   <Ionicons name="wallet" size={24} color="#D97706" />
                 </View>
                 <Text style={styles.gridActionTitle}>Nouvelle caisse</Text>
-                <Text style={styles.gridActionSub}>Ouvrir une caisse visible aux fidèles</Text>
+                <Text style={styles.gridActionSub}>Ouvrir une caisse visible aux membres</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -440,7 +439,7 @@ export default function TresorerieScreen() {
                   <Ionicons name="people" size={24} color="#10B981" />
                 </View>
                 <Text style={styles.gridActionTitle}>Qui a payé</Text>
-                <Text style={styles.gridActionSub}>{payers.length} personnes avec historique</Text>
+                <Text style={styles.gridActionSub}>{payers.length} personnes référencées</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -469,74 +468,15 @@ export default function TresorerieScreen() {
                 <Text style={styles.gridActionSub}>Entrées & sorties détaillées</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Comptes de l Église</Text>
-              <Card style={styles.summaryListCard}>
-                <View style={styles.caissRow}>
-                  <View style={styles.caissLeft}>
-                    <Ionicons name="business" size={18} color={AppColors.primary} />
-                    <Text style={styles.caissTitle}>Banque Principale</Text>
-                  </View>
-                  <Text style={styles.caissValue}>
-                    {tresorerie.soldeBancaire.toLocaleString('fr-FR')} F
-                  </Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.caissRow}>
-                  <View style={styles.caissLeft}>
-                    <Ionicons name="water" size={18} color="#1DA1F2" />
-                    <Text style={styles.caissTitle}>Compte Wave</Text>
-                  </View>
-                  <Text style={styles.caissValue}>
-                    {tresorerie.soldeWave.toLocaleString('fr-FR')} F
-                  </Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.caissRow}>
-                  <View style={styles.caissLeft}>
-                    <Ionicons name="phone-portrait" size={18} color="#FF7900" />
-                    <Text style={styles.caissTitle}>Orange Money</Text>
-                  </View>
-                  <Text style={styles.caissValue}>
-                    {tresorerie.soldeOrangeMoney.toLocaleString('fr-FR')} F
-                  </Text>
-                </View>
-                <View style={styles.divider} />
-                <View style={styles.caissRow}>
-                  <View style={styles.caissLeft}>
-                    <Ionicons name="cash" size={18} color="#10B981" />
-                    <Text style={styles.caissTitle}>Caisse Physique (Secrétariat)</Text>
-                  </View>
-                  <Text style={styles.caissValue}>
-                    {tresorerie.soldeCaissePhysique.toLocaleString('fr-FR')} F
-                  </Text>
-                </View>
-                {geniusPaySolde != null ? (
-                  <>
-                    <View style={styles.divider} />
-                    <View style={styles.caissRow}>
-                      <View style={styles.caissLeft}>
-                        <Ionicons name="card" size={18} color={AppColors.primary} />
-                        <Text style={styles.caissTitle}>Compte GeniusPay</Text>
-                      </View>
-                      <Text style={styles.caissValue}>
-                        {geniusPaySolde.toLocaleString('fr-FR')} F
-                      </Text>
-                    </View>
-                  </>
-                ) : null}
-              </Card>
-            </View>
           </View>
         )}
 
         {activeTab === 'PAYEURS' && (
           <View style={styles.tabBody}>
             <Text style={styles.inlineHint}>
-              Les fidèles de l’assemblée et leurs versements.
+              Annuaire des membres de l’assemblée. L’historique des versements est dans l’onglet Transactions.
             </Text>
-            <PayersDirectory />
+            <PayersDirectory variant="members" />
           </View>
         )}
 
@@ -645,7 +585,7 @@ export default function TresorerieScreen() {
               pendingPayments.map((tx) => (
                 <Card key={tx.id} style={styles.validationCard} variant="elevated">
                   <View style={styles.validationHeader}>
-                    <Badge label="En attente de visa" variant="warning" size="sm" />
+                    <Badge label="À valider" variant="warning" size="sm" />
                     <Text style={styles.validationDate}>{tx.date} à {tx.heure}</Text>
                   </View>
 
@@ -1361,35 +1301,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: AppColors.textMuted,
     marginTop: 2,
-  },
-  summaryListCard: {
-    padding: 16,
-    borderRadius: 18,
-  },
-  caissRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  caissLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  caissTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: AppColors.textPrimary,
-  },
-  caissValue: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: AppColors.primary,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: AppColors.borderLight,
   },
   caissesList: {
     gap: 12,
