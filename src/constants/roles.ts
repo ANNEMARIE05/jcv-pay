@@ -22,6 +22,15 @@ export function canManageMoney(role?: RoleUtilisateur | null) {
   return role === 'TRESORIER' || role === 'SUPER_ADMIN';
 }
 
+/** Consultation des versements en attente (super admin, admin, trésorier). */
+export function canViewPendingPayments(role?: RoleUtilisateur | null) {
+  return (
+    role === 'SUPER_ADMIN' ||
+    role === 'ADMINISTRATEUR' ||
+    role === 'TRESORIER'
+  );
+}
+
 export function isStaff(role?: RoleUtilisateur | null) {
   return canManagePeople(role) || canManageMoney(role);
 }

@@ -14,7 +14,7 @@ import { TabsSelector } from '@/components/common/TabsSelector';
 import { AccountCreatedModal, CreatedAccount } from '@/components/finance/AccountCreatedModal';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
-import { ASSIGNABLE_ROLES, ROLE_LABELS, canManagePeople, isStaff } from '@/constants/roles';
+import { ASSIGNABLE_ROLES, ROLE_LABELS, canManagePeople } from '@/constants/roles';
 import { RoleUtilisateur } from '@/types';
 import { ListSkeleton } from '@/components/motion/Skeleton';
 import { useScreenReady } from '@/hooks/useScreenReady';

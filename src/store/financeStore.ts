@@ -105,10 +105,8 @@ interface FinanceState {
   membresTrace: Record<string, MembreTrace>;
   dernierAjoutId: string | null;
   tresorerieGlobale: typeof emptyTreasury;
-  geniusPaySolde: number | null;
   refreshEspace: (role?: RoleUtilisateur) => Promise<void>;
   loadReceipt: (id: string) => Promise<Recu>;
-  loadGeniusPay: () => Promise<number | null>;
   processPayment: (payload: NewPaymentPayload) => Promise<{ recu: Recu; checkoutUrl?: string | null; transactionId: string }>;
   syncPayment: (transactionId: string) => Promise<Transaction | undefined>;
   recordCashPayment: (payload: {
@@ -138,7 +136,6 @@ interface FinanceState {
   transferCaisse: (payload: { fromId: string; toId: string; montant: number; motif: string }) => Promise<void>;
   deleteCaisse: (caisseId: string) => Promise<void>;
   validatePayment: (transactionId: string) => Promise<void>;
-  rejectPayment: (transactionId: string) => Promise<void>;
   getReceiptById: (id: string) => Recu | undefined;
   getProjectById: (id: string) => Projet | undefined;
   getEventById: (id: string) => Evenement | undefined;
@@ -240,25 +237,6 @@ function rememberUtilisateur(user: Utilisateur & { motDePasseTemporaire?: string
   });
 }
 
-function readGeniusPaySolde(payload: unknown): number | null {
-  const queue: unknown[] = [payload];
-  const keys = ['balance', 'solde', 'available_balance', 'available', 'amount', 'current_balance'];
-  while (queue.length) {
-    const current = queue.shift();
-    if (!current || typeof current !== 'object') continue;
-    const record = current as Record<string, unknown>;
-    for (const key of keys) {
-      const value = record[key];
-      if (typeof value === 'number' && Number.isFinite(value)) return value;
-      if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value);
-    }
-    Object.values(record).forEach((value) => {
-      if (value && typeof value === 'object') queue.push(value);
-    });
-  }
-  return null;
-}
-
 async function postEspace(path: string, body?: unknown) {
   const espace = await api.post<EspacePayload>(path, body);
   applyEspace(espace);
@@ -285,7 +263,6 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
   membresTrace: {},
   dernierAjoutId: null,
   tresorerieGlobale: emptyTreasury,
-  geniusPaySolde: null,
 
   refreshEspace: async (role) => {
     const espace = await api.get<EspacePayload>('/api/espace');
@@ -298,31 +275,57 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
         // La liste de l’espace reste affichée si ce droit est refusé.
       }
     }
-    if (role === 'TRESORIER' || role === 'SUPER_ADMIN') {
-      try {
-        await get().loadGeniusPay();
-      } catch {
-        // Le solde marchand reste masqué s’il est indisponible.
-      }
-    }
   },
 
   loadReceipt: async (id) => {
-    const cached = get().getReceiptById(id);
+    const state = get();
+    const cached = state.recus.find(
+      (item) => item.id === id || item.numeroRecu === id || item.transactionId === id
+    );
     if (cached) return cached;
-    const recu = await api.get<Recu>(`/api/paiements/recus/${encodeURIComponent(id)}`);
-    useFinanceStore.setState((state) => ({
-      recus: state.recus.some((item) => item.id === recu.id) ? state.recus : [recu, ...state.recus],
-    }));
-    return recu;
+
+    try {
+      const recu = await api.get<Recu>(`/api/paiements/recus/${encodeURIComponent(id)}`);
+      useFinanceStore.setState((s) => ({
+        recus: s.recus.some((item) => item.id === recu.id) ? s.recus : [recu, ...s.recus],
+      }));
+      return recu;
+    } catch (err) {
+      // Si la route spécifique échoue, vérifier si l'id correspond à une transaction dans le store
+      const tx = state.transactions.find(
+        (t) => t.id === id || t.recuNumero === id || t.reference === id
+      );
+      if (tx) {
+        const derived: Recu = {
+          id: tx.id,
+          numeroRecu: tx.recuNumero || tx.reference,
+          transactionId: tx.id,
+          titre: tx.titre,
+          type: tx.type,
+          donateurNom: tx.donateurNom,
+          donateurMatricule: '',
+          donateurTelephone: tx.donateurTelephone,
+          donateurEmail: '',
+          montant: tx.montant,
+          frais: 0,
+          total: tx.montant,
+          date: tx.date,
+          heure: tx.heure,
+          statut: tx.statut,
+          moyenPaiement: tx.moyenPaiement,
+          egliseNom: 'Église Jésus Christ Victoire',
+          egliseAdresse: 'Boulevard de la Victoire, Abidjan',
+          codeSecurite: tx.reference,
+        };
+        useFinanceStore.setState((s) => ({
+          recus: [derived, ...s.recus.filter((r) => r.id !== derived.id)],
+        }));
+        return derived;
+      }
+      throw err;
+    }
   },
 
-  loadGeniusPay: async () => {
-    const data = await api.get<Record<string, unknown>>('/api/tresorerie/geniuspay');
-    const solde = readGeniusPaySolde(data);
-    useFinanceStore.setState({ geniusPaySolde: solde });
-    return solde;
-  },
 
   processPayment: async (payload) => {
     const data = await api.post<{
@@ -381,10 +384,6 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
 
   validatePayment: async (transactionId) => {
     await postEspace(`/api/paiements/${transactionId}/valider`);
-  },
-
-  rejectPayment: async (transactionId) => {
-    await postEspace(`/api/paiements/${transactionId}/rejeter`);
   },
 
   getReceiptById: (id) => {

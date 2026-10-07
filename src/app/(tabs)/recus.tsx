@@ -18,6 +18,7 @@ import { usePagedList } from '@/hooks/usePagedList';
 import { useFinanceStore } from '@/store/financeStore';
 import { useAuthStore } from '@/store/authStore';
 import { isStaff } from '@/constants/roles';
+import { formatMoyenPaiementLabel } from '@/constants/versement';
 import { TicketSkeleton } from '@/components/motion/Skeleton';
 import { FadeInView } from '@/components/motion/FadeIn';
 import { useScreenReady } from '@/hooks/useScreenReady';
@@ -260,7 +261,7 @@ export default function RecusScreen() {
                       </View>
                       <View style={styles.infoColRight}>
                         <Text style={styles.label}>Règlement</Text>
-                        <Text style={styles.val}>{recu.moyenPaiement.replace('_', ' ')}</Text>
+                        <Text style={styles.val}>{formatMoyenPaiementLabel(recu.moyenPaiement)}</Text>
                       </View>
                     </View>
 

@@ -62,7 +62,10 @@ export function KeyboardAwareScreen({
   const scrollYRef = useRef(0);
   const keyboardHeight = useKeyboardInset();
   const keyboardHeightRef = useRef(keyboardHeight);
-  keyboardHeightRef.current = keyboardHeight;
+
+  useEffect(() => {
+    keyboardHeightRef.current = keyboardHeight;
+  }, [keyboardHeight]);
 
   const ensureVisible = useCallback((screenY: number, height: number) => {
     const windowH = Dimensions.get('window').height;

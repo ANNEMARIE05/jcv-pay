@@ -11,6 +11,7 @@ import { usePagedList } from '@/hooks/usePagedList';
 import { PayerSummary, useFinanceStore } from '@/store/financeStore';
 import { StatutPaiement, Transaction } from '@/types';
 import { ROLE_LABELS } from '@/constants/roles';
+import { formatMoyenPaiementLabel } from '@/constants/versement';
 import { MemberDetailModal } from '@/components/finance/MemberDetailModal';
 
 export type PayersDirectoryVariant = 'members' | 'history';
@@ -44,6 +45,7 @@ export function PayersDirectory({ variant, canEditRole = false }: PayersDirector
   const getPayersSummary = useFinanceStore((s) => s.getPayersSummary);
   const payers = useMemo(
     () => getPayersSummary(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- réabonnement aux données du store
     [getPayersSummary, transactions, utilisateurs, dernierAjoutId]
   );
 
@@ -213,7 +215,7 @@ function TxRow({ tx, showDonor = false }: { tx: Transaction; showDonor?: boolean
         {showDonor ? <Text style={styles.payerName}>{tx.donateurNom}</Text> : null}
         <Text style={styles.payerTxTitle}>{tx.titre}</Text>
         <Text style={styles.payerTxDate}>
-          {tx.date} • {tx.heure} • {tx.type} • {tx.moyenPaiement.replace('_', ' ')}
+          {tx.date} • {tx.heure} • {tx.type} • {formatMoyenPaiementLabel(tx.moyenPaiement)}
         </Text>
       </View>
       <View style={{ alignItems: 'flex-end' }}>

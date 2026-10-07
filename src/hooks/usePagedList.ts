@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 export function usePagedList<T>(items: T[], pageSize = 8, resetKey = '') {
-  const [page, setPage] = useState(1);
-
-  useEffect(() => {
-    setPage(1);
-  }, [resetKey, pageSize]);
+  const [pageState, setPageState] = useState({ resetKey, page: 1 });
+  const page = pageState.resetKey === resetKey ? pageState.page : 1;
+  const setPage = (nextPage: number) => setPageState({ resetKey, page: nextPage });
 
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);

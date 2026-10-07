@@ -11,13 +11,14 @@ import {
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { getVersementChannel } from '@/constants/versement';
 import { AppColors, Shadows } from '@/constants/colors';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { Badge } from '@/components/common/Badge';
 import { TabsSelector } from '@/components/common/TabsSelector';
 import { useFinanceStore } from '@/store/financeStore';
-import { TypeContribution, StatutPaiement } from '@/types';
 import { ListSkeleton } from '@/components/motion/Skeleton';
 import { useScreenReady } from '@/hooks/useScreenReady';
 import { scrollInputIntoView } from '@/utils/scrollInputIntoView';
@@ -95,7 +96,7 @@ export default function HistoriqueScreen() {
       case 'CARTE_BANCAIRE':
         return { name: 'Carte Bancaire', icon: 'card-outline', color: '#4A5568' };
       case 'ESPECES':
-        return { name: 'Espèces au Guichet', icon: 'cash-outline', color: '#10B981' };
+        return { name: 'Paiement en espèces', icon: 'cash-outline', color: '#10B981' };
       case 'VIREMENT':
         return { name: 'Virement Bancaire', icon: 'business-outline', color: AppColors.primary };
       default:
@@ -242,8 +243,7 @@ export default function HistoriqueScreen() {
           ) : (
             filteredTransactions.map((tx, i) => {
               const method = getPaymentMethodLabel(tx.moyenPaiement);
-              const isValid = tx.statut === 'VALIDE';
-
+              const channelLogo = getVersementChannel(tx.moyenPaiement)?.logoSource;
               return (
                 <Card key={tx.id} style={styles.txCard} variant="elevated" enterIndex={i}>
                   <View style={styles.txTopRow}>
@@ -268,7 +268,15 @@ export default function HistoriqueScreen() {
                   {/* Payment Info */}
                   <View style={styles.txMetaRow}>
                     <View style={styles.txMethodBox}>
-                      <Ionicons name={method.icon as any} size={15} color={method.color} />
+                      {channelLogo ? (
+                        <Image
+                          source={channelLogo}
+                          style={styles.txMethodLogo}
+                          contentFit="contain"
+                        />
+                      ) : (
+                        <Ionicons name={method.icon as any} size={15} color={method.color} />
+                      )}
                       <Text style={styles.txMethodText}>{method.name}</Text>
                     </View>
                     <Text style={styles.txDate}>
@@ -505,6 +513,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+  },
+  txMethodLogo: {
+    width: 22,
+    height: 18,
   },
   txMethodText: {
     fontSize: 12,

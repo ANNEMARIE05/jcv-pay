@@ -23,7 +23,8 @@ import { KeyboardSpacer } from '@/components/common/KeyboardAwareScreen';
 import { scrollInputIntoView } from '@/utils/scrollInputIntoView';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
-import { SourceCaisse } from '@/types';
+import { SourceCaisse, Transaction } from '@/types';
+import { formatMoyenPaiementLabel, isCashPayment } from '@/constants/versement';
 import { ListSkeleton } from '@/components/motion/Skeleton';
 import { useScreenReady } from '@/hooks/useScreenReady';
 import { isStaff } from '@/constants/roles';
@@ -135,10 +136,14 @@ export default function TresorerieScreen() {
     }
   };
 
-  const handleValidate = (txId: string, donateur: string, montant: number) => {
+  const handleValidate = (tx: Transaction) => {
+    const { id: txId, donateurNom: donateur, montant, moyenPaiement } = tx;
+    const cash = isCashPayment(moyenPaiement);
     Alert.alert(
-      'Valider le paiement',
-      `Confirmez-vous la bonne réception des ${montant.toLocaleString('fr-FR')} FCFA de ${donateur} ?`,
+      cash ? 'Confirmer la réception des espèces' : 'Valider le paiement',
+      cash
+        ? `Confirmez-vous avoir reçu ${montant.toLocaleString('fr-FR')} FCFA en espèces de ${donateur} au guichet ?`
+        : `Confirmez-vous la bonne réception des ${montant.toLocaleString('fr-FR')} FCFA de ${donateur} ?`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
@@ -582,15 +587,26 @@ export default function TresorerieScreen() {
                 </Text>
               </Card>
             ) : (
-              pendingPayments.map((tx) => (
+              pendingPayments.map((tx) => {
+                const cash = isCashPayment(tx.moyenPaiement);
+                return (
                 <Card key={tx.id} style={styles.validationCard} variant="elevated">
                   <View style={styles.validationHeader}>
-                    <Badge label="À valider" variant="warning" size="sm" />
+                    <Badge label={cash ? 'Espèces' : 'À valider'} variant="warning" size="sm" />
                     <Text style={styles.validationDate}>{tx.date} à {tx.heure}</Text>
                   </View>
 
+                  {cash ? (
+                    <Text style={styles.validationCashNote}>
+                      Paiement en espèces — confirmer après réception au guichet
+                    </Text>
+                  ) : null}
+
                   <Text style={styles.validationDonor}>{tx.donateurNom}</Text>
                   <Text style={styles.validationTitle}>{tx.titre}</Text>
+                  <Text style={styles.validationMethod}>
+                    {formatMoyenPaiementLabel(tx.moyenPaiement)}
+                  </Text>
 
                   <View style={styles.validationBottomRow}>
                     <Text style={styles.validationAmount}>
@@ -598,15 +614,18 @@ export default function TresorerieScreen() {
                     </Text>
                     <TouchableOpacity
                       style={styles.validateBtn}
-                      onPress={() => handleValidate(tx.id, tx.donateurNom, tx.montant)}
+                      onPress={() => handleValidate(tx)}
                       activeOpacity={0.8}
                     >
                       <Ionicons name="checkmark-circle" size={18} color={AppColors.white} />
-                      <Text style={styles.validateBtnText}>Valider</Text>
+                      <Text style={styles.validateBtnText}>
+                        {cash ? 'Confirmer espèces' : 'Valider'}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </Card>
-              ))
+              );
+              })
             )}
           </View>
         )}
@@ -1410,6 +1429,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: AppColors.textSecondary,
     marginTop: 2,
+  },
+  validationCashNote: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#166534',
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  validationMethod: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: AppColors.textMuted,
+    marginTop: 6,
   },
   validationBottomRow: {
     flexDirection: 'row',

@@ -1,6 +1,6 @@
 'use no memo';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -28,8 +28,16 @@ import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
 import { CaisseDesk } from '@/components/finance/CaisseDesk';
 import { AccountCreatedModal, CreatedAccount } from '@/components/finance/AccountCreatedModal';
-import { ASSIGNABLE_ROLES, ROLE_LABELS, canManageCampaigns, canManageMoney, canManagePeople } from '@/constants/roles';
-import { RoleUtilisateur, SourceCaisse } from '@/types';
+import {
+  ASSIGNABLE_ROLES,
+  ROLE_LABELS,
+  canManageCampaigns,
+  canManageMoney,
+  canManagePeople,
+  canViewPendingPayments,
+} from '@/constants/roles';
+import { RoleUtilisateur, SourceCaisse, Transaction } from '@/types';
+import { formatMoyenPaiementLabel, isCashPayment } from '@/constants/versement';
 
 type AdminTab = 'VALIDATIONS' | 'PROJETS' | 'CAISSES' | 'EVENEMENTS' | 'COTISATIONS' | 'MEMBRES';
 
@@ -49,7 +57,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const caissesProjet = useFinanceStore((s) => s.caissesProjet);
 
   const validatePayment = useFinanceStore((s) => s.validatePayment);
-  const rejectPayment = useFinanceStore((s) => s.rejectPayment);
   const addProject = useFinanceStore((s) => s.addProject);
   const addEvent = useFinanceStore((s) => s.addEvent);
   const addCotisation = useFinanceStore((s) => s.addCotisation);
@@ -61,12 +68,16 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const money = canManageMoney(user?.role);
   const people = canManagePeople(user?.role);
   const campaigns = canManageCampaigns(user?.role);
+  const pendingView = canViewPendingPayments(user?.role);
 
-  const [activeTab, setActiveTab] = useState<AdminTab>(money ? 'VALIDATIONS' : 'MEMBRES');
-
-  useEffect(() => {
-    setActiveTab(money ? 'VALIDATIONS' : 'MEMBRES');
-  }, [money, people, user?.role]);
+  const permissionKey = `${pendingView}:${people}:${user?.role ?? ''}`;
+  const defaultTab: AdminTab = pendingView ? 'VALIDATIONS' : 'MEMBRES';
+  const [tabState, setTabState] = useState<{ key: string; tab: AdminTab }>(() => ({
+    key: permissionKey,
+    tab: defaultTab,
+  }));
+  const activeTab = tabState.key === permissionKey ? tabState.tab : defaultTab;
+  const setActiveTab = (tab: AdminTab) => setTabState({ key: permissionKey, tab });
 
   // Modals visibility
   const [showProjectModal, setShowProjectModal] = useState(false);
@@ -126,14 +137,18 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const projetsOuverts = projets.filter((p) => p.statut !== 'CLOTURE');
   const projetSelectionne = projets.find((p) => p.id === cashProjetId);
 
-  const handleValidate = (txId: string, donateur: string, montant: number) => {
+  const handleValidate = (tx: Transaction) => {
+    const { id: txId, donateurNom: donateur, montant, moyenPaiement } = tx;
+    const cash = isCashPayment(moyenPaiement);
     Alert.alert(
-      'Valider l encaissement',
-      `Confirmez-vous la réception des ${montant.toLocaleString('fr-FR')} FCFA de ${donateur} ?`,
+      cash ? 'Confirmer la réception des espèces' : 'Confirmer la réception',
+      cash
+        ? `Confirmez-vous avoir reçu ${montant.toLocaleString('fr-FR')} FCFA en espèces de ${donateur} au guichet ?`
+        : `L’argent des ${montant.toLocaleString('fr-FR')} FCFA de ${donateur} est-il bien arrivé sur le compte de l’église ?`,
       [
         { text: 'Annuler', style: 'cancel' },
         {
-          text: 'Oui, Valider',
+          text: 'Oui, confirmer',
           onPress: async () => {
             try {
               await validatePayment(txId);
@@ -143,28 +158,6 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
               );
             } catch (error) {
               Alert.alert('Validation impossible', error instanceof Error ? error.message : 'Réessayez.');
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleReject = (txId: string, donateur: string) => {
-    Alert.alert(
-      'Rejeter le versement',
-      `Confirmez-vous le rejet du versement de ${donateur} ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Rejeter',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await rejectPayment(txId);
-              Alert.alert('Paiement rejeté', 'Le statut a été mis à jour.');
-            } catch (error) {
-              Alert.alert('Rejet impossible', error instanceof Error ? error.message : 'Réessayez.');
             }
           },
         },
@@ -599,7 +592,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
 
         {!embedded && (() => {
           const tabs = ([
-              money
+              pendingView
                 ? { id: 'VALIDATIONS' as const, label: 'À confirmer', count: pendingPayments.length }
                 : null,
               campaigns ? { id: 'CAISSES' as const, label: 'Caisses', count: caissesProjet.length } : null,
@@ -638,32 +631,51 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
           );
         })()}
 
-        {!embedded && money && activeTab === 'VALIDATIONS' && (
+        {pendingView && (embedded || activeTab === 'VALIDATIONS') && (
           <View style={styles.section}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>
-                Versements à confirmer ({pendingPayments.length})
+                Versements en attente ({pendingPayments.length})
               </Text>
-              <Text style={styles.sectionSub}>Cochez seulement si l argent est bien arrivé</Text>
+              <Text style={styles.sectionSub}>
+                {money
+                  ? 'Confirmez seulement si l’argent est bien arrivé'
+                  : 'Suivi des déclarations en attente de confirmation par la trésorerie'}
+              </Text>
             </View>
 
             {pendingPayments.length === 0 ? (
               <Card style={styles.emptyCard}>
                 <Ionicons name="checkmark-done-circle-outline" size={48} color={AppColors.success} />
-                <Text style={styles.emptyTitle}>Rien à confirmer</Text>
+                <Text style={styles.emptyTitle}>Rien en attente</Text>
                 <Text style={styles.emptySub}>
-                  Quand un membre déclare un versement Wave, Orange Money, virement ou espèces, il apparaît ici.
+                  Quand un membre paie en ligne ou déclare des espèces, la transaction apparaît ici tant qu’elle n’est pas confirmée.
                 </Text>
               </Card>
             ) : (
-              pendingPayments.map((tx) => (
+              pendingPayments.map((tx) => {
+                const cash = isCashPayment(tx.moyenPaiement);
+                return (
                 <Card key={tx.id} style={styles.pendingCard} variant="elevated">
                   <View style={styles.pendingTop}>
-                    <Badge label="À valider" variant="warning" size="sm" />
+                    <Badge
+                      label={cash ? 'Espèces' : 'En attente'}
+                      variant="warning"
+                      size="sm"
+                    />
                     <Text style={styles.pendingDate}>
                       {tx.date} • {tx.heure}
                     </Text>
                   </View>
+
+                  {cash ? (
+                    <View style={styles.cashHintBox}>
+                      <Ionicons name="cash-outline" size={18} color="#15803D" />
+                      <Text style={styles.cashHintText}>
+                        Paiement en espèces — à confirmer après réception au guichet
+                      </Text>
+                    </View>
+                  ) : null}
 
                   <Text style={styles.pendingTitle}>{tx.titre}</Text>
 
@@ -677,8 +689,10 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                       <Text style={styles.metaVal}>{tx.donateurTelephone}</Text>
                     </View>
                     <View style={styles.metaRow}>
-                      <Text style={styles.metaLbl}>Opérateur :</Text>
-                      <Text style={styles.metaVal}>{tx.moyenPaiement.replace('_', ' ')}</Text>
+                      <Text style={styles.metaLbl}>Moyen de paiement :</Text>
+                      <Text style={styles.metaVal}>
+                        {formatMoyenPaiementLabel(tx.moyenPaiement)}
+                      </Text>
                     </View>
                     <View style={styles.metaRow}>
                       <Text style={styles.metaLbl}>Montant déclaré :</Text>
@@ -688,27 +702,21 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                     </View>
                   </View>
 
-                  <View style={styles.actionsRow}>
-                    <TouchableOpacity
-                      style={styles.rejectBtn}
-                      onPress={() => handleReject(tx.id, tx.donateurNom)}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="close" size={16} color={AppColors.danger} />
-                      <Text style={styles.rejectBtnText}>Rejeter</Text>
-                    </TouchableOpacity>
-
+                  {money ? (
                     <TouchableOpacity
                       style={styles.validateBtn}
-                      onPress={() => handleValidate(tx.id, tx.donateurNom, tx.montant)}
+                      onPress={() => handleValidate(tx)}
                       activeOpacity={0.8}
                     >
                       <Ionicons name="checkmark" size={16} color={AppColors.white} />
-                      <Text style={styles.validateBtnText}>Valider l encaissement</Text>
+                      <Text style={styles.validateBtnText}>
+                        {cash ? 'Confirmer la réception des espèces' : 'Confirmer la réception'}
+                      </Text>
                     </TouchableOpacity>
-                  </View>
+                  ) : null}
                 </Card>
-              ))
+              );
+              })
             )}
           </View>
         )}
@@ -1851,6 +1859,24 @@ const styles = StyleSheet.create({
     color: AppColors.textPrimary,
     marginBottom: 10,
   },
+  cashHintBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+  },
+  cashHintText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#166534',
+    lineHeight: 16,
+  },
   pendingMetaBox: {
     backgroundColor: '#F8FAFC',
     borderRadius: 14,
@@ -1876,35 +1902,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: AppColors.primary,
   },
-  actionsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  rejectBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: AppColors.danger,
-    gap: 6,
-  },
-  rejectBtnText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: AppColors.danger,
-  },
   validateBtn: {
-    flex: 2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 12,
     backgroundColor: AppColors.primary,
     gap: 6,
+    marginTop: 4,
   },
   validateBtnText: {
     fontSize: 12,

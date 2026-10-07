@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, Modal, TouchableOpacity, Alert, Linking, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -25,12 +25,10 @@ export function AccountCreatedModal({
   title?: string;
   intro?: string;
 }) {
-  const [copied, setCopied] = useState(false);
   const password = account?.motDePasseTemporaire?.trim() ?? '';
-
-  useEffect(() => {
-    setCopied(false);
-  }, [account?.telephone, password]);
+  const copyScopeKey = `${account?.telephone ?? ''}:${password}`;
+  const [copiedScopeKey, setCopiedScopeKey] = useState<string | null>(null);
+  const copied = copiedScopeKey === copyScopeKey && copyScopeKey.length > 0;
 
   const copyPassword = async () => {
     if (!password) return;
@@ -40,7 +38,7 @@ export function AccountCreatedModal({
         Alert.alert('Copie impossible', 'Sélectionnez le mot de passe et copiez-le manuellement.');
         return;
       }
-      setCopied(true);
+      setCopiedScopeKey(copyScopeKey);
     } catch (error) {
       Alert.alert('Copie impossible', error instanceof Error ? error.message : 'Réessayez.');
     }

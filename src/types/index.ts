@@ -55,6 +55,10 @@ export interface Transaction {
   evenementId?: string;
   donateurNom: string;
   donateurTelephone: string;
+  checkoutUrl?: string;
+  geniuspayReference?: string;
+  /** Paiement en ligne accepté sur la passerelle, en attente de validation trésorerie */
+  passerelleConfirmee?: boolean;
 }
 
 export interface Projet {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -7,40 +7,95 @@ import {
   TouchableOpacity,
   Alert,
   Share,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { AppColors, Shadows } from '@/constants/colors';
 import { Header } from '@/components/common/Header';
 import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { Barcode } from '@/components/common/Barcode';
 import { useFinanceStore } from '@/store/financeStore';
+import { Recu } from '@/types';
+import { formatMoyenPaiementLabel } from '@/constants/versement';
 
 export default function RecuDetailScreen() {
   const { id, choix } = useLocalSearchParams<{ id: string; choix?: string }>();
   const loadReceipt = useFinanceStore((s) => s.loadReceipt);
-  const recu = useFinanceStore((s) =>
-    s.recus.find((item) => item.id === id || item.numeroRecu === id || item.transactionId === id)
+  const syncPayment = useFinanceStore((s) => s.syncPayment);
+  const recus = useFinanceStore((s) => s.recus);
+  const transactions = useFinanceStore((s) => s.transactions);
+  const refreshEspace = useFinanceStore((s) => s.refreshEspace);
+
+  // Recherche dynamique robuste
+  const storeRecu = recus.find(
+    (item) => item.id === id || item.numeroRecu === id || item.transactionId === id
   );
-  const [loading, setLoading] = useState(!recu);
+
+  const matchedTx = useMemo(
+    () =>
+      transactions.find(
+        (t) =>
+          t.id === id ||
+          t.recuNumero === id ||
+          t.reference === id ||
+          (storeRecu?.transactionId && t.id === storeRecu.transactionId)
+      ),
+    [transactions, id, storeRecu?.transactionId]
+  );
+
+  // Reçu final : soit celui du store, soit dérivé de la transaction
+  const recu: Recu | undefined = useMemo(() => {
+    if (storeRecu) return storeRecu;
+    if (!matchedTx) return undefined;
+    return {
+      id: matchedTx.id,
+      numeroRecu: matchedTx.recuNumero || matchedTx.reference,
+      transactionId: matchedTx.id,
+      titre: matchedTx.titre,
+      type: matchedTx.type,
+      donateurNom: matchedTx.donateurNom,
+      donateurMatricule: '',
+      donateurTelephone: matchedTx.donateurTelephone,
+      donateurEmail: '',
+      montant: matchedTx.montant,
+      frais: 0,
+      total: matchedTx.montant,
+      date: matchedTx.date,
+      heure: matchedTx.heure,
+      statut: matchedTx.statut,
+      moyenPaiement: matchedTx.moyenPaiement,
+      egliseNom: 'Église Jésus Christ Victoire',
+      egliseAdresse: 'Boulevard de la Victoire, Abidjan',
+      codeSecurite: matchedTx.reference,
+    };
+  }, [storeRecu, matchedTx]);
+
+  const transaction = matchedTx || transactions.find(
+    (t) => t.id === recu?.transactionId || t.recuNumero === recu?.numeroRecu
+  );
+
+  const [fetchState, setFetchState] = useState<{ id: string; done: boolean }>({
+    id: id ?? '',
+    done: Boolean(recu),
+  });
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
-    if (!id || recu) {
-      setLoading(false);
-      return;
-    }
+    if (!id || recu) return;
     let cancelled = false;
-    setLoading(true);
-    loadReceipt(id)
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    Promise.allSettled([loadReceipt(id), refreshEspace()]).finally(() => {
+      if (!cancelled) setFetchState({ id, done: true });
+    });
     return () => {
       cancelled = true;
     };
-  }, [id, loadReceipt, recu]);
+  }, [id, loadReceipt, refreshEspace, recu]);
+
+  const loading = Boolean(id && !recu && !(fetchState.id === id && fetchState.done));
 
   const showChoice = choix === '1' || recu?.statut === 'EN_ATTENTE';
 
@@ -91,6 +146,49 @@ export default function RecuDetailScreen() {
       `Le fichier ${recu.numeroRecu}.pdf a été enregistré avec succès dans vos documents.`,
       [{ text: 'OK' }]
     );
+  };
+
+  const handleSync = async () => {
+    if (!recu?.transactionId || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const updated = await syncPayment(recu.transactionId);
+      if (updated?.statut === 'VALIDE') {
+        Alert.alert('Paiement validé !', 'Votre contribution a été confirmée avec succès.');
+        if (id) loadReceipt(id);
+      } else if (updated?.statut === 'ECHEC') {
+        Alert.alert('Paiement non abouti', 'La transaction n’a pas pu être validée.');
+        if (id) loadReceipt(id);
+      } else if (recu.moyenPaiement === 'ESPECES') {
+        Alert.alert(
+          'En attente du dépôt d’espèces',
+          'Veuillez déposer vos espèces au secrétariat ou guichet du Temple. La trésorerie confirmera la réception pour certifier votre reçu.'
+        );
+      } else {
+        Alert.alert('Paiement en attente', 'Le paiement en ligne est en cours de validation par votre opérateur.');
+      }
+    } catch {
+      Alert.alert('Information', 'Impossible de vérifier le statut pour l’instant.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleOpenCheckout = async () => {
+    const url = transaction?.checkoutUrl;
+    if (!url) return;
+    try {
+      if (Platform.OS === 'web') {
+        window.open(url, '_blank');
+      } else {
+        const res = await WebBrowser.openAuthSessionAsync(url, 'jcvpay://');
+        if (res.type === 'success' || res.type === 'cancel' || res.type === 'dismiss') {
+          await handleSync();
+        }
+      }
+    } catch {
+      Linking.openURL(url);
+    }
   };
 
   return (
@@ -187,20 +285,22 @@ export default function RecuDetailScreen() {
               <View style={styles.detailsGrid}>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailTitle}>Nom du membre</Text>
-                  <Text style={styles.detailContent}>{recu.donateurNom}</Text>
+                  <Text style={styles.detailContent}>{recu.donateurNom || 'Anonyme'}</Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailTitle}>Matricule d église</Text>
-                  <Text style={styles.detailContent}>{recu.donateurMatricule}</Text>
+                  <Text style={styles.detailContent}>{recu.donateurMatricule || 'Non renseigné'}</Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailTitle}>Téléphone</Text>
-                  <Text style={styles.detailContent}>{recu.donateurTelephone}</Text>
+                  <Text style={styles.detailContent}>{recu.donateurTelephone || 'Non renseigné'}</Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailTitle}>Mode de règlement</Text>
                   <Text style={styles.detailContent}>
-                    {recu.moyenPaiement.replace('_', ' ')}
+                    {recu.moyenPaiement
+                      ? formatMoyenPaiementLabel(recu.moyenPaiement)
+                      : 'Non spécifié'}
                   </Text>
                 </View>
               </View>
@@ -213,7 +313,7 @@ export default function RecuDetailScreen() {
                 <View style={styles.financeRow}>
                   <Text style={styles.financeLabel}>Montant versé</Text>
                   <Text style={styles.financeValue}>
-                    {recu.montant.toLocaleString('fr-FR')} FCFA
+                    {(recu.montant ?? 0).toLocaleString('fr-FR')} FCFA
                   </Text>
                 </View>
                 <View style={styles.financeRow}>
@@ -223,7 +323,7 @@ export default function RecuDetailScreen() {
                 <View style={[styles.financeRow, styles.totalRow]}>
                   <Text style={styles.totalLabel}>TOTAL NET ENCAISSÉ</Text>
                   <Text style={styles.totalValue}>
-                    {recu.total.toLocaleString('fr-FR')} FCFA
+                    {(recu.total ?? recu.montant ?? 0).toLocaleString('fr-FR')} FCFA
                   </Text>
                 </View>
               </View>
@@ -238,7 +338,7 @@ export default function RecuDetailScreen() {
 
             {/* Ticket Bottom Section: Realistic Barcode & Security Hash */}
             <View style={styles.ticketBottomSection}>
-              <Barcode value={recu.numeroRecu} height={50} />
+              <Barcode value={recu.numeroRecu || recu.id} height={50} />
               <Text style={styles.securityCode}>
                 Certificat numérique : {recu.codeSecurite}
               </Text>
@@ -246,7 +346,9 @@ export default function RecuDetailScreen() {
                 {recu.statut === 'VALIDE'
                   ? 'Document certifié conforme par la trésorerie'
                   : recu.statut === 'EN_ATTENTE'
-                    ? 'Déclaration enregistrée. Le reçu officiel sera disponible après confirmation du versement.'
+                    ? (recu.moyenPaiement === 'ESPECES'
+                        ? 'Versement en espèces déclaré. Le reçu officiel sera validé par la trésorerie dès réception des fonds au secrétariat.'
+                        : 'Paiement en ligne en cours de finalisation.')
                     : recu.statut === 'REJETE'
                       ? 'Ce versement a été rejeté par la trésorerie.'
                       : 'Le paiement n’a pas pu être effectué (échec de paiement). Aucun montant n’a été débité.'}
@@ -264,10 +366,12 @@ export default function RecuDetailScreen() {
               </Text>
               <Text style={styles.choiceHint}>
                 {recu.statut === 'VALIDE'
-                  ? 'Votre reçu est prêt.'
+                  ? 'Votre reçu est prêt et certifié.'
                   : recu.statut === 'ECHEC'
                     ? 'Le paiement n’a pas pu être effectué. Vous pouvez retenter votre versement dès maintenant.'
-                    : 'Versez l argent hors de l appli. La trésorerie confirmera, puis le reçu passera en validé.'}
+                    : recu.moyenPaiement === 'ESPECES'
+                      ? 'Déposez votre enveloppe au secrétariat du Temple. La trésorerie confirmera la réception pour valider votre reçu.'
+                      : 'Finalisez le règlement en ligne pour valider immédiatement votre reçu officiel.'}
               </Text>
               {recu.statut === 'ECHEC' ? (
                 <Button
@@ -278,11 +382,31 @@ export default function RecuDetailScreen() {
                   style={styles.actionBtn}
                 />
               ) : null}
+              {recu.statut === 'EN_ATTENTE' && transaction?.checkoutUrl ? (
+                <Button
+                  title="Finaliser le paiement en ligne"
+                  onPress={handleOpenCheckout}
+                  size="lg"
+                  variant="primary"
+                  icon={<Ionicons name="card-outline" size={20} color={AppColors.white} />}
+                  style={styles.actionBtn}
+                />
+              ) : null}
+              {recu.statut === 'EN_ATTENTE' && recu.moyenPaiement !== 'ESPECES' ? (
+                <Button
+                  title={isSyncing ? "Vérification en cours…" : "Vérifier la confirmation du paiement"}
+                  onPress={handleSync}
+                  size="lg"
+                  variant={transaction?.checkoutUrl ? "outline" : "primary"}
+                  icon={<Ionicons name="refresh-outline" size={20} color={transaction?.checkoutUrl ? AppColors.primary : AppColors.white} />}
+                  style={styles.actionBtn}
+                />
+              ) : null}
               <Button
                 title="Retour à l accueil"
                 onPress={() => router.replace('/(tabs)')}
                 size="lg"
-                variant={recu.statut === 'ECHEC' ? 'outline' : 'primary'}
+                variant={recu.statut === 'VALIDE' ? 'primary' : 'outline'}
                 style={styles.actionBtn}
               />
               <Button

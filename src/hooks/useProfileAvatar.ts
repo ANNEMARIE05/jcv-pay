@@ -11,24 +11,25 @@ function avatarStorageKey(userId: string) {
 export function useProfileAvatar() {
   const user = useAuthStore((s) => s.user);
   const updateAvatar = useAuthStore((s) => s.updateAvatar);
-  const [localUri, setLocalUri] = useState<string | null>(null);
+  const userId = user?.id;
+  const [storedUriByUser, setStoredUriByUser] = useState<Record<string, string | null>>({});
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    if (!user?.id) {
-      setLocalUri(null);
-      return;
-    }
+    if (!userId) return;
     let cancelled = false;
     (async () => {
-      const stored = await tokenStorage.get(avatarStorageKey(user.id));
-      if (!cancelled) setLocalUri(stored);
+      const stored = await tokenStorage.get(avatarStorageKey(userId));
+      if (!cancelled) {
+        setStoredUriByUser((prev) => ({ ...prev, [userId]: stored }));
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [user?.id, user?.avatar]);
+  }, [userId, user?.avatar]);
 
+  const localUri = userId ? storedUriByUser[userId] ?? null : null;
   const displayUri = user?.avatar || localUri || null;
 
   const pickAndUpload = useCallback(async () => {
@@ -63,7 +64,9 @@ export function useProfileAvatar() {
     setUploading(true);
     try {
       const saved = await updateAvatar(dataUri, previewUri);
-      setLocalUri(saved);
+      if (userId) {
+        setStoredUriByUser((prev) => ({ ...prev, [userId]: saved }));
+      }
     } catch (error) {
       Alert.alert(
         'Photo non enregistrée',
@@ -72,7 +75,7 @@ export function useProfileAvatar() {
     } finally {
       setUploading(false);
     }
-  }, [updateAvatar, user?.id]);
+  }, [updateAvatar, userId, user?.id]);
 
   return { displayUri, pickAndUpload, uploading };
 }
