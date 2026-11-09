@@ -67,6 +67,7 @@ export interface NewPaymentPayload {
   evenementId?: string;
   cotisationId?: string;
   platform?: string;
+  appRedirect?: string;
 }
 
 export interface EspacePayload {
@@ -279,19 +280,19 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
   },
 
   loadReceipt: async (id) => {
-    const state = get();
-    const cached = state.recus.find(
-      (item) => item.id === id || item.numeroRecu === id || item.transactionId === id
-    );
-    if (cached) return cached;
-
     try {
       const recu = await api.get<Recu>(`/api/paiements/recus/${encodeURIComponent(id)}`);
       useFinanceStore.setState((s) => ({
-        recus: s.recus.some((item) => item.id === recu.id) ? s.recus : [recu, ...s.recus],
+        recus: [recu, ...s.recus.filter((item) => item.id !== recu.id)],
       }));
       return recu;
     } catch (err) {
+      const state = get();
+      const cached = state.recus.find(
+        (item) => item.id === id || item.numeroRecu === id || item.transactionId === id
+      );
+      if (cached) return cached;
+
       // Si la route spécifique échoue, vérifier si l'id correspond à une transaction dans le store
       const tx = state.transactions.find(
         (t) => t.id === id || t.recuNumero === id || t.reference === id
@@ -340,10 +341,15 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
   },
 
   syncPayment: async (transactionId) => {
-    const data = await api.post<{ espace: EspacePayload; transaction?: Transaction }>(
+    const data = await api.post<{ espace: EspacePayload; transaction?: Transaction; recu?: Recu | null }>(
       `/api/paiements/${transactionId}/synchroniser`
     );
     applyEspace(data.espace);
+    if (data.recu) {
+      useFinanceStore.setState((s) => ({
+        recus: [data.recu!, ...s.recus.filter((item) => item.id !== data.recu!.id)],
+      }));
+    }
     return data.transaction;
   },
 

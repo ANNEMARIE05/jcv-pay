@@ -71,13 +71,21 @@ export function TabsSelector<T extends string>({
               <View
                 style={[
                   styles.badge,
-                  isActive ? styles.badgeActive : styles.badgeInactive,
+                  isActive
+                    ? variant === 'segmented'
+                      ? styles.badgeActiveSegmented
+                      : styles.badgeActive
+                    : styles.badgeInactive,
                 ]}
               >
                 <Text
                   style={[
                     styles.badgeText,
-                    isActive ? styles.badgeTextActive : styles.badgeTextInactive,
+                    isActive
+                      ? variant === 'segmented'
+                        ? styles.badgeTextActiveSegmented
+                        : styles.badgeTextActive
+                      : styles.badgeTextInactive,
                   ]}
                 >
                   {tab.count}
@@ -182,6 +190,9 @@ const styles = StyleSheet.create({
   badgeActive: {
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
   },
+  badgeActiveSegmented: {
+    backgroundColor: AppColors.primaryMuted,
+  },
   badgeInactive: {
     backgroundColor: '#E2E8F0',
   },
@@ -191,6 +202,9 @@ const styles = StyleSheet.create({
   },
   badgeTextActive: {
     color: AppColors.white,
+  },
+  badgeTextActiveSegmented: {
+    color: AppColors.primary,
   },
   badgeTextInactive: {
     color: AppColors.textSecondary,

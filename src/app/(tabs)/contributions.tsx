@@ -347,13 +347,36 @@ export default function ContributionsScreen() {
               onPress={() => router.push(`/recu/${tx.recuNumero}`)}
             >
               <View style={styles.historyRow}>
-                <Ionicons name="checkmark-circle" size={22} color={AppColors.success} />
+                <Ionicons
+                  name={
+                    tx.statut === 'VALIDE'
+                      ? 'checkmark-circle'
+                      : tx.statut === 'EN_ATTENTE'
+                        ? 'time'
+                        : 'close-circle'
+                  }
+                  size={22}
+                  color={
+                    tx.statut === 'VALIDE'
+                      ? AppColors.success
+                      : tx.statut === 'EN_ATTENTE'
+                        ? '#D97706'
+                        : AppColors.danger
+                  }
+                />
                 <View style={{ flex: 1, marginLeft: 10 }}>
                   <Text style={styles.historyItemTitle}>{tx.titre}</Text>
                   <Text style={styles.historyItemDate}>{tx.date} • Réf: {tx.reference}</Text>
                 </View>
-                <Text style={styles.historyItemAmount}>
-                  +{tx.montant.toLocaleString('fr-FR')} F
+                <Text
+                  style={[
+                    styles.historyItemAmount,
+                    tx.statut === 'EN_ATTENTE' && { color: '#D97706' },
+                    tx.statut !== 'VALIDE' && tx.statut !== 'EN_ATTENTE' && { color: AppColors.danger },
+                  ]}
+                >
+                  {tx.statut === 'VALIDE' ? '+' : ''}
+                  {tx.montant.toLocaleString('fr-FR')} F
                 </Text>
               </View>
             </Card>

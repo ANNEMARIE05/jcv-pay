@@ -26,6 +26,7 @@ import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 import { VERSEMENT_CHANNELS } from '@/constants/versement';
 import {
   extractReceiptIdFromReturnUrl,
+  getPaymentReturnBaseUrl,
   returnUrlIndicatesError,
 } from '@/utils/paymentReturn';
 
@@ -58,6 +59,7 @@ export default function PaiementScreen() {
 
   const processPayment = useFinanceStore((s) => s.processPayment);
   const syncPayment = useFinanceStore((s) => s.syncPayment);
+  const loadReceipt = useFinanceStore((s) => s.loadReceipt);
 
   const [selectedMethod, setSelectedMethod] = useState<MoyenPaiement>('WAVE');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -67,9 +69,28 @@ export default function PaiementScreen() {
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activePaymentRef = useRef<ActiveOnlinePayment | null>(null);
+  const hasNavigatedRef = useRef(false);
 
-  const goToReceipt = (recuId: string, isError = false) => {
+  const goToReceipt = async (recuId: string, isError = false, transactionId?: string) => {
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
     stopPolling();
+    try {
+      WebBrowser.dismissBrowser();
+    } catch {
+      // Ignoré si aucun navigateur ouvert
+    }
+    try {
+      await Promise.race([
+        Promise.allSettled([
+          transactionId ? syncPayment(transactionId) : Promise.resolve(),
+          loadReceipt(recuId),
+        ]),
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ]);
+    } catch {
+      // Ignoré
+    }
     setActivePayment(null);
     activePaymentRef.current = null;
     router.replace(`/recu/${recuId}?choix=1${isError ? '&error=1' : ''}`);
@@ -105,14 +126,14 @@ export default function PaiementScreen() {
       );
     }
 
-    // Écoute des redirections deep linking (ex: jcvpay://recu/:id)
+    // Écoute des redirections deep linking (ex: exp://.../--/recu/:id ou jcvpay://recu/:id)
     const subscription = Linking.addEventListener('url', (event) => {
       if (!event.url.includes('recu')) return;
       const fallback = activePaymentRef.current?.recuId;
+      const txId = activePaymentRef.current?.transactionId;
       const targetId = extractReceiptIdFromReturnUrl(event.url, fallback);
-      syncInBackground(activePaymentRef.current?.transactionId);
       if (targetId) {
-        goToReceipt(targetId, returnUrlIndicatesError(event.url));
+        goToReceipt(targetId, returnUrlIndicatesError(event.url), txId);
       } else {
         stopPolling();
         setActivePayment(null);
@@ -138,13 +159,13 @@ export default function PaiementScreen() {
         return false;
       }
 
-      const result = await WebBrowser.openAuthSessionAsync(url, 'jcvpay://');
+      const redirectUrl = getPaymentReturnBaseUrl();
+      const result = await WebBrowser.openAuthSessionAsync(url, redirectUrl);
 
       if (result.type === 'success' && result.url) {
         const targetId = extractReceiptIdFromReturnUrl(result.url, recuId);
-        syncInBackground(transactionId);
         if (targetId) {
-          goToReceipt(targetId, returnUrlIndicatesError(result.url));
+          await goToReceipt(targetId, returnUrlIndicatesError(result.url), transactionId);
           return true;
         }
       }
@@ -154,9 +175,8 @@ export default function PaiementScreen() {
         result.type === 'cancel' ||
         result.type === 'dismiss'
       ) {
-        syncInBackground(transactionId);
         if (recuId) {
-          goToReceipt(recuId, returnUrlIndicatesError(result.url || ''));
+          await goToReceipt(recuId, returnUrlIndicatesError((result as { url?: string }).url || ''), transactionId);
           return true;
         }
       }
@@ -174,19 +194,15 @@ export default function PaiementScreen() {
   };
 
   const checkPaymentStatus = async (transactionId: string, recuId: string) => {
-    if (isCheckingStatus) return;
+    if (isCheckingStatus || hasNavigatedRef.current) return;
     setIsCheckingStatus(true);
     try {
       const updated = await syncPayment(transactionId);
       if (updated?.statut === 'VALIDE') {
-        stopPolling();
         setPaymentSuccess(true);
-        setActivePayment(null);
-        router.replace(`/recu/${recuId}?choix=1`);
+        await goToReceipt(recuId, false, transactionId);
       } else if (updated?.statut === 'ECHEC' || updated?.statut === 'REJETE' || updated?.statut === 'ANNULE') {
-        stopPolling();
-        setActivePayment(null);
-        router.replace(`/recu/${recuId}?choix=1&error=1`);
+        await goToReceipt(recuId, true, transactionId);
       }
     } catch {
       // Ignoré lors des vérifications de routine
@@ -197,6 +213,7 @@ export default function PaiementScreen() {
 
   const handleDeclare = async () => {
     setIsProcessing(true);
+    hasNavigatedRef.current = false;
     try {
       const result = await processPayment({
         titre,
@@ -209,6 +226,7 @@ export default function PaiementScreen() {
         caisseProjetId: params.caisseProjetId,
         evenementId: params.evenementId,
         platform: Platform.OS,
+        appRedirect: getPaymentReturnBaseUrl(),
       });
 
       setIsProcessing(false);
@@ -222,17 +240,20 @@ export default function PaiementScreen() {
         };
         activePaymentRef.current = paymentData;
         setActivePayment(paymentData);
+
+        stopPolling();
+        pollIntervalRef.current = setInterval(() => {
+          checkPaymentStatus(result.transactionId, result.recu.id);
+        }, 2500);
+
         const navigated = await openPaymentUrl(
           result.checkoutUrl,
           result.recu.id,
           result.transactionId
         );
 
-        if (!navigated) {
+        if (navigated) {
           stopPolling();
-          pollIntervalRef.current = setInterval(() => {
-            checkPaymentStatus(result.transactionId, result.recu.id);
-          }, 3000);
         }
       } else {
         // Paiement physique ou sans redirection immédiate

@@ -18,9 +18,9 @@ export type PayersDirectoryVariant = 'members' | 'history';
 
 const STATUS_LABEL: Record<StatutPaiement, string> = {
   VALIDE: 'Validé',
-  EN_ATTENTE: 'Attente',
+  EN_ATTENTE: 'En attente',
   REJETE: 'Rejeté',
-  ANNULE: 'Échec',
+  ANNULE: 'Annulé',
   ECHEC: 'Échec',
 };
 
@@ -29,8 +29,7 @@ function matchesQuery(haystack: string, query: string) {
 }
 
 function statusBadgeLabel(statut: StatutPaiement) {
-  if (statut === 'EN_ATTENTE') return 'En cours';
-  return STATUS_LABEL[statut];
+  return STATUS_LABEL[statut] ?? 'Échec';
 }
 
 type PayersDirectoryProps = {
@@ -222,7 +221,13 @@ function TxRow({ tx, showDonor = false }: { tx: Transaction; showDonor?: boolean
         <Text style={styles.payerTxAmount}>{tx.montant.toLocaleString('fr-FR')} F</Text>
         <Badge
           label={statusBadgeLabel(tx.statut)}
-          variant={tx.statut === 'VALIDE' ? 'success' : 'danger'}
+          variant={
+            tx.statut === 'VALIDE'
+              ? 'success'
+              : tx.statut === 'EN_ATTENTE'
+                ? 'warning'
+                : 'danger'
+          }
           size="sm"
         />
       </View>

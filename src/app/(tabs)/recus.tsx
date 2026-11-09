@@ -223,8 +223,24 @@ export default function RecusScreen() {
                     <View style={styles.staffTxTop}>
                       <Text style={styles.contributionTitle}>{tx.titre}</Text>
                       <Badge
-                        label={tx.statut === 'VALIDE' ? 'Validé' : 'Échec'}
-                        variant={tx.statut === 'VALIDE' ? 'success' : 'danger'}
+                        label={
+                          tx.statut === 'VALIDE'
+                            ? 'Validé'
+                            : tx.statut === 'EN_ATTENTE'
+                              ? 'En attente'
+                              : tx.statut === 'REJETE'
+                                ? 'Rejeté'
+                                : tx.statut === 'ANNULE'
+                                  ? 'Annulé'
+                                  : 'Échec'
+                        }
+                        variant={
+                          tx.statut === 'VALIDE'
+                            ? 'success'
+                            : tx.statut === 'EN_ATTENTE'
+                              ? 'warning'
+                              : 'danger'
+                        }
                         size="sm"
                       />
                     </View>
@@ -261,14 +277,20 @@ export default function RecusScreen() {
                       label={
                         recu.statut === 'VALIDE'
                           ? 'Validé'
-                          : recu.statut === 'REJETE'
-                            ? 'Rejeté'
-                            : 'Échec de paiement'
+                          : recu.statut === 'EN_ATTENTE'
+                            ? 'En attente'
+                            : recu.statut === 'REJETE'
+                              ? 'Rejeté'
+                              : recu.statut === 'ANNULE'
+                                ? 'Annulé'
+                                : 'Échec de paiement'
                       }
                       variant={
                         recu.statut === 'VALIDE'
                           ? 'success'
-                          : 'danger'
+                          : recu.statut === 'EN_ATTENTE'
+                            ? 'warning'
+                            : 'danger'
                       }
                       size="sm"
                     />

@@ -23,6 +23,7 @@ import { Recu } from '@/types';
 import { formatMoyenPaiementLabel } from '@/constants/versement';
 import {
   extractReceiptIdFromReturnUrl,
+  getPaymentReturnBaseUrl,
   returnUrlIndicatesError,
 } from '@/utils/paymentReturn';
 
@@ -89,7 +90,7 @@ export default function RecuDetailScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
-    if (!id || recu) return;
+    if (!id) return;
     let cancelled = false;
     Promise.allSettled([loadReceipt(id), refreshEspace()]).finally(() => {
       if (!cancelled) setFetchState({ id, done: true });
@@ -97,16 +98,28 @@ export default function RecuDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id, loadReceipt, refreshEspace, recu]);
+  }, [id, loadReceipt, refreshEspace]);
 
   useEffect(() => {
-    if (!id || choix !== '1') return;
+    if (!id) return;
     const txId = recu?.transactionId || matchedTx?.id;
+    const isOnlinePending =
+      recu?.statut === 'EN_ATTENTE' && recu?.moyenPaiement !== 'ESPECES';
+    if (choix !== '1' && !isOnlinePending) return;
     if (!txId) return;
-    syncPayment(txId)
-      .then(() => refreshEspace())
-      .catch(() => undefined);
-  }, [id, choix, recu?.transactionId, matchedTx?.id, syncPayment, refreshEspace]);
+
+    const runSync = () => {
+      syncPayment(txId)
+        .then(() => Promise.allSettled([loadReceipt(id), refreshEspace()]))
+        .catch(() => undefined);
+    };
+
+    runSync();
+
+    if (!isOnlinePending) return;
+    const timer = setInterval(runSync, 3000);
+    return () => clearInterval(timer);
+  }, [id, choix, recu?.transactionId, recu?.statut, recu?.moyenPaiement, matchedTx?.id, syncPayment, loadReceipt, refreshEspace]);
 
   const loading = Boolean(id && !recu && !(fetchState.id === id && fetchState.done));
 
@@ -196,7 +209,14 @@ export default function RecuDetailScreen() {
         window.open(url, '_blank');
         return;
       }
-      const res = await WebBrowser.openAuthSessionAsync(url, 'jcvpay://');
+      const redirectUrl = getPaymentReturnBaseUrl();
+      const res = await WebBrowser.openAuthSessionAsync(url, redirectUrl);
+      if (recu?.transactionId) {
+        await syncPayment(recu.transactionId).catch(() => undefined);
+      }
+      if (id) {
+        await loadReceipt(id).catch(() => undefined);
+      }
       if (res.type === 'success' && res.url) {
         const targetId = extractReceiptIdFromReturnUrl(res.url, receiptFallback);
         if (targetId && targetId !== id) {
@@ -204,13 +224,6 @@ export default function RecuDetailScreen() {
             `/recu/${targetId}?choix=1${returnUrlIndicatesError(res.url) ? '&error=1' : ''}`
           );
         }
-      }
-      if (recu?.transactionId) {
-        syncPayment(recu.transactionId)
-          .then(() => {
-            if (id) loadReceipt(id);
-          })
-          .catch(() => undefined);
       }
     } catch {
       Linking.openURL(url);

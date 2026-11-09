@@ -1,3 +1,19 @@
+import * as Linking from 'expo-linking';
+
+/**
+ * Retourne l'URL de base de retour vers l'application :
+ * - En Expo Go : exp://<host>:8081/--
+ * - En build standalone : jcvpay://
+ * - Sur Web : http://localhost:8081
+ */
+export function getPaymentReturnBaseUrl(): string {
+  try {
+    return Linking.createURL('/');
+  } catch {
+    return 'jcvpay://';
+  }
+}
+
 /**
  * Extrait l'identifiant de reçu depuis une URL de retour (deep link ou web).
  */
