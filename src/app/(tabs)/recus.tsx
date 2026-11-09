@@ -24,27 +24,36 @@ import { FadeInView } from '@/components/motion/FadeIn';
 import { useScreenReady } from '@/hooks/useScreenReady';
 import { Card } from '@/components/common/Card';
 
-type StatusTab = 'TOUS' | 'VALIDE' | 'ECHEC';
+type StatusTab = 'TOUS' | 'VALIDE' | 'EN_ATTENTE' | 'ECHEC';
 
 export default function RecusScreen() {
   const user = useAuthStore((s) => s.user);
   const staff = isStaff(user?.role);
   const recus = useFinanceStore((s) => s.recus);
   const transactions = useFinanceStore((s) => s.transactions);
+  const resume = useFinanceStore((s) => s.resume);
 
   const [activeTab, setActiveTab] = useState<StatusTab>('TOUS');
   const [searchQuery, setSearchQuery] = useState('');
   const ready = useScreenReady(560);
 
-  const visibleRecus = useMemo(
-    () => recus.filter((r) => r.statut !== 'EN_ATTENTE'),
-    [recus]
-  );
+  const visibleRecus = recus;
+  const visibleTransactions = transactions;
 
-  const visibleTransactions = useMemo(
-    () => transactions.filter((t) => t.statut !== 'EN_ATTENTE'),
-    [transactions]
-  );
+  const totalAllTransactionsAmount = useMemo(() => {
+    if (staff && resume.totalToutesTransactions != null) {
+      return resume.totalToutesTransactions;
+    }
+    const list = staff ? transactions : recus;
+    return list.reduce((sum, item) => sum + (item.montant || 0), 0);
+  }, [staff, transactions, recus, resume.totalToutesTransactions]);
+
+  const txOperationCount =
+    staff && resume.totalTransactionsCount != null
+      ? resume.totalTransactionsCount
+      : staff
+        ? visibleTransactions.length
+        : visibleRecus.length;
 
   const filteredRecus = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -105,6 +114,24 @@ export default function RecusScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Total of All Transactions Summary */}
+        <View style={styles.summaryBarContainer}>
+          <View style={styles.summaryBar}>
+            <View>
+              <Text style={styles.summaryBarLabel}>Total de toutes les transactions</Text>
+              <Text style={styles.summaryBarAmount}>
+                {totalAllTransactionsAmount.toLocaleString('fr-FR')} <Text style={styles.currencySmall}>FCFA</Text>
+              </Text>
+            </View>
+            <View style={styles.summaryBarBadge}>
+              <Ionicons name="receipt-outline" size={14} color={AppColors.primary} />
+              <Text style={styles.summaryBarBadgeText}>
+                {txOperationCount} opération{txOperationCount > 1 ? 's' : ''}
+              </Text>
+            </View>
+          </View>
+        </View>
+
         {/* Segmented Filter Bar (Screen 13 tabs: Ongoing, Completed, Canceled) */}
         <View style={styles.tabsContainer}>
           <TouchableOpacity
@@ -147,6 +174,13 @@ export default function RecusScreen() {
                 count: staff
                   ? visibleTransactions.filter((t) => t.statut === 'VALIDE').length
                   : visibleRecus.filter((r) => r.statut === 'VALIDE').length,
+              },
+              {
+                id: 'EN_ATTENTE',
+                label: 'En attente',
+                count: staff
+                  ? visibleTransactions.filter((t) => t.statut === 'EN_ATTENTE').length
+                  : visibleRecus.filter((r) => r.statut === 'EN_ATTENTE').length,
               },
               {
                 id: 'ECHEC',
@@ -311,10 +345,56 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 130,
   },
-  tabsContainer: {
+  summaryBarContainer: {
     paddingHorizontal: 20,
     paddingTop: 16,
-    marginBottom: 16,
+    paddingBottom: 4,
+  },
+  summaryBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: AppColors.white,
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: AppColors.borderLight,
+    ...Shadows.small,
+  },
+  summaryBarLabel: {
+    fontSize: 11,
+    color: AppColors.textSecondary,
+    fontWeight: '500',
+  },
+  summaryBarAmount: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: AppColors.primary,
+    marginTop: 2,
+  },
+  currencySmall: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: AppColors.textSecondary,
+  },
+  summaryBarBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: AppColors.primaryMuted,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  summaryBarBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: AppColors.primary,
+  },
+  tabsContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    marginBottom: 12,
   },
   calendarBanner: {
     flexDirection: 'row',

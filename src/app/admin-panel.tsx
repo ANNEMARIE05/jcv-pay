@@ -50,6 +50,7 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const user = useAuthStore((s) => s.user);
 
   const tresorerie = useFinanceStore((s) => s.tresorerieGlobale);
+  const resume = useFinanceStore((s) => s.resume);
   const transactions = useFinanceStore((s) => s.transactions);
   const projets = useFinanceStore((s) => s.projets);
   const evenements = useFinanceStore((s) => s.evenements);
@@ -69,6 +70,28 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
   const people = canManagePeople(user?.role);
   const campaigns = canManageCampaigns(user?.role);
   const pendingView = canViewPendingPayments(user?.role);
+
+  const totalVolumeAllTransactions =
+    resume.totalToutesTransactions ??
+    transactions.reduce((sum, t) => sum + t.montant, 0);
+  const txCount =
+    resume.totalTransactionsCount ?? transactions.length;
+  const totalValide =
+    resume.totalTransactionsValidees ??
+    transactions.filter((t) => t.statut === 'VALIDE').reduce((s, t) => s + t.montant, 0);
+  const totalEnAttente =
+    resume.totalTransactionsEnAttente ??
+    transactions.filter((t) => t.statut === 'EN_ATTENTE').reduce((s, t) => s + t.montant, 0);
+  const totalEchec =
+    resume.totalTransactionsEchec ??
+    transactions
+      .filter((t) => t.statut === 'ECHEC' || t.statut === 'REJETE' || t.statut === 'ANNULE')
+      .reduce((s, t) => s + t.montant, 0);
+  const countEchec =
+    resume.countTransactionsEchec ??
+    transactions.filter(
+      (t) => t.statut === 'ECHEC' || t.statut === 'REJETE' || t.statut === 'ANNULE'
+    ).length;
 
   const permissionKey = `${pendingView}:${people}:${user?.role ?? ''}`;
   const defaultTab: AdminTab = pendingView ? 'VALIDATIONS' : 'MEMBRES';
@@ -455,6 +478,36 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
               </Card>
             </View>
           </View>
+
+          <Card style={styles.txTotalCard} variant="elevated">
+            <Text style={styles.txTotalLabel}>TOTAL DE TOUTES LES TRANSACTIONS</Text>
+            <Text style={styles.txTotalAmount}>
+              {totalVolumeAllTransactions.toLocaleString('fr-FR')} FCFA
+            </Text>
+            <Text style={styles.txTotalHint}>
+              {txCount} opération{txCount > 1 ? 's' : ''} enregistrée{txCount > 1 ? 's' : ''}
+            </Text>
+            <View style={styles.txTotalStatsRow}>
+              <View style={styles.txTotalStat}>
+                <Text style={styles.txTotalStatLabel}>Validées</Text>
+                <Text style={styles.txTotalStatValOk}>
+                  {totalValide.toLocaleString('fr-FR')} F
+                </Text>
+              </View>
+              <View style={styles.txTotalStat}>
+                <Text style={styles.txTotalStatLabel}>En attente</Text>
+                <Text style={styles.txTotalStatValWarn}>
+                  {totalEnAttente.toLocaleString('fr-FR')} F
+                </Text>
+              </View>
+              <View style={styles.txTotalStat}>
+                <Text style={styles.txTotalStatLabel}>Refus / échec</Text>
+                <Text style={styles.txTotalStatValErr}>
+                  {totalEchec.toLocaleString('fr-FR')} F ({countEchec})
+                </Text>
+              </View>
+            </View>
+          </Card>
         </View>
         ) : null}
 
@@ -479,6 +532,15 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
                 FCFA
               </Text>
               <Text style={styles.statMiniSub}>Somme enregistrée sur l’application</Text>
+            </Card>
+            <Card style={styles.txTotalCard} variant="elevated">
+              <Text style={styles.txTotalLabel}>TOTAL DE TOUTES LES TRANSACTIONS</Text>
+              <Text style={styles.txTotalAmount}>
+                {totalVolumeAllTransactions.toLocaleString('fr-FR')} FCFA
+              </Text>
+              <Text style={styles.txTotalHint}>
+                {txCount} opération{txCount > 1 ? 's' : ''} — dont {countEchec} refus ou échec
+              </Text>
             </Card>
           </View>
         ) : null}
@@ -561,29 +623,31 @@ export function AdminDashboard({ embedded = false }: { embedded?: boolean }) {
             </TouchableOpacity>
             ) : null}
 
-            {money ? (
+            {(money || people) ? (
             <TouchableOpacity
               style={styles.actionGridBtn}
-              onPress={() => router.push('/tresorerie')}
+              onPress={() => router.push('/(tabs)/recus')}
               activeOpacity={0.85}
             >
               <View style={[styles.actionBtnIconCircle, { backgroundColor: '#FFF7ED' }]}>
-                <Ionicons name="stats-chart-outline" size={22} color={AppColors.accent} />
+                <Ionicons name="swap-horizontal-outline" size={22} color={AppColors.accent} />
               </View>
-              <Text style={styles.actionBtnTitle}>Trésorerie complète</Text>
-              <Text style={styles.actionBtnDesc}>Caisses et journal</Text>
+              <Text style={styles.actionBtnTitle}>Toutes les transactions</Text>
+              <Text style={styles.actionBtnDesc}>Validées, en attente et refus</Text>
             </TouchableOpacity>
-            ) : people ? (
+            ) : null}
+
+            {(money || people) ? (
             <TouchableOpacity
               style={styles.actionGridBtn}
-              onPress={() => router.push('/tresorerie')}
+              onPress={() => router.push('/historique')}
               activeOpacity={0.85}
             >
-              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#FFF7ED' }]}>
-                <Ionicons name="stats-chart-outline" size={22} color={AppColors.accent} />
+              <View style={[styles.actionBtnIconCircle, { backgroundColor: '#F3E8FF' }]}>
+                <Ionicons name="time-outline" size={22} color="#7C3AED" />
               </View>
-              <Text style={styles.actionBtnTitle}>Voir la trésorerie</Text>
-              <Text style={styles.actionBtnDesc}>Caisses et soldes de l Église</Text>
+              <Text style={styles.actionBtnTitle}>Historique détaillé</Text>
+              <Text style={styles.actionBtnDesc}>Filtres par statut et type</Text>
             </TouchableOpacity>
             ) : null}
           </View>
@@ -1706,6 +1770,66 @@ const styles = StyleSheet.create({
   statBoxHint: {
     fontSize: 11,
     color: 'rgba(255, 255, 255, 0.75)',
+  },
+  txTotalCard: {
+    marginTop: 14,
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: AppColors.white,
+  },
+  txTotalLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    color: AppColors.textMuted,
+    textTransform: 'uppercase',
+  },
+  txTotalAmount: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: AppColors.primary,
+    marginTop: 6,
+  },
+  txTotalHint: {
+    fontSize: 12,
+    color: AppColors.textMuted,
+    marginTop: 4,
+  },
+  txTotalStatsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
+  },
+  txTotalStat: {
+    flex: 1,
+    minWidth: 90,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: AppColors.background,
+  },
+  txTotalStatLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: AppColors.textMuted,
+  },
+  txTotalStatValOk: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#16A34A',
+    marginTop: 4,
+  },
+  txTotalStatValWarn: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#D97706',
+    marginTop: 4,
+  },
+  txTotalStatValErr: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#DC2626',
+    marginTop: 4,
   },
   twoColsRow: {
     flexDirection: 'row',

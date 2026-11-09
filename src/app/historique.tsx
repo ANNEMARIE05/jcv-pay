@@ -34,9 +34,11 @@ const CATEGORY_FILTERS = [
 ];
 
 const STATUS_FILTERS = [
-  { id: 'TOUS', label: 'Tous les statuts' },
-  { id: 'VALIDE', label: 'Validés' },
-  { id: 'ECHEC', label: 'Échecs' },
+  { id: 'TOUS', label: 'Toutes les transactions' },
+  { id: 'VALIDE', label: 'Validées' },
+  { id: 'EN_ATTENTE', label: 'En attente' },
+  { id: 'ECHEC', label: 'Échecs & Refus' },
+  { id: 'ANNULE', label: 'Annulées' },
 ];
 
 export default function HistoriqueScreen() {
@@ -53,10 +55,29 @@ export default function HistoriqueScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const ready = useScreenReady(580);
 
-  const visibleTransactions = useMemo(
-    () => transactions.filter((t) => t.statut !== 'EN_ATTENTE'),
-    [transactions]
-  );
+  const visibleTransactions = transactions;
+
+  const totalToutesTransactions = useMemo(() => {
+    return transactions.reduce((sum, t) => sum + t.montant, 0);
+  }, [transactions]);
+
+  const totalValideTransactions = useMemo(() => {
+    return transactions
+      .filter((t) => t.statut === 'VALIDE')
+      .reduce((sum, t) => sum + t.montant, 0);
+  }, [transactions]);
+
+  const totalEnAttenteTransactions = useMemo(() => {
+    return transactions
+      .filter((t) => t.statut === 'EN_ATTENTE')
+      .reduce((sum, t) => sum + t.montant, 0);
+  }, [transactions]);
+
+  const totalEchecTransactions = useMemo(() => {
+    return transactions
+      .filter((t) => t.statut === 'ECHEC' || t.statut === 'REJETE' || t.statut === 'ANNULE')
+      .reduce((sum, t) => sum + t.montant, 0);
+  }, [transactions]);
 
   const filteredTransactions = useMemo(() => {
     return visibleTransactions.filter((t) => {
@@ -65,8 +86,8 @@ export default function HistoriqueScreen() {
       const matchStatus =
         activeStatus === 'TOUS' ||
         t.statut === activeStatus ||
-        (activeStatus === 'ECHEC' &&
-          (t.statut === 'ECHEC' || t.statut === 'REJETE' || t.statut === 'ANNULE'));
+        (activeStatus === 'ECHEC' && (t.statut === 'ECHEC' || t.statut === 'REJETE')) ||
+        (activeStatus === 'ANNULE' && t.statut === 'ANNULE');
       const matchQuery =
         t.titre.toLowerCase().includes(searchQuery.toLowerCase()) ||
         t.reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -78,9 +99,7 @@ export default function HistoriqueScreen() {
   }, [visibleTransactions, activeCategory, activeStatus, searchQuery]);
 
   const totalFilteredAmount = useMemo(() => {
-    return filteredTransactions
-      .filter((t) => t.statut === 'VALIDE')
-      .reduce((sum, t) => sum + t.montant, 0);
+    return filteredTransactions.reduce((sum, t) => sum + t.montant, 0);
   }, [filteredTransactions]);
 
   const getPaymentMethodLabel = (moyen: string) => {
@@ -127,39 +146,60 @@ export default function HistoriqueScreen() {
           <Card style={styles.summaryCard} variant="elevated">
             <View style={styles.summaryHeader}>
               <View>
-                <Text style={styles.summaryLabel}>Total validé (2026)</Text>
+                <Text style={styles.summaryLabel}>Total de toutes les transactions</Text>
                 <Text style={styles.summaryAmount}>
-                  {resume.totalContribue.toLocaleString('fr-FR')} <Text style={styles.currency}>FCFA</Text>
+                  {totalToutesTransactions.toLocaleString('fr-FR')} <Text style={styles.currency}>FCFA</Text>
+                </Text>
+                <Text style={styles.summarySub}>
+                  {transactions.length} opération{transactions.length > 1 ? 's' : ''} au total enregistrée{transactions.length > 1 ? 's' : ''}
                 </Text>
               </View>
               <View style={styles.summaryBadge}>
-                <Ionicons name="shield-checkmark" size={16} color={AppColors.accent} />
-                <Text style={styles.summaryBadgeText}>100% Certifié</Text>
+                <Ionicons name="receipt" size={16} color={AppColors.accent} />
+                <Text style={styles.summaryBadgeText}>Comptabilité</Text>
               </View>
             </View>
 
             <View style={styles.summaryStatsRow}>
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>Opérations</Text>
-                <Text style={styles.statVal}>{visibleTransactions.length}</Text>
-              </View>
-              <View style={styles.statSep} />
-              <View style={styles.statBox}>
                 <Text style={styles.statLabel}>Validées</Text>
                 <Text style={[styles.statVal, { color: AppColors.success }]}>
-                  {visibleTransactions.filter((t) => t.statut === 'VALIDE').length}
+                  {totalValideTransactions.toLocaleString('fr-FR')} F
+                </Text>
+                <Text style={styles.statCount}>
+                  {transactions.filter((t) => t.statut === 'VALIDE').length} opération(s)
                 </Text>
               </View>
               <View style={styles.statSep} />
               <View style={styles.statBox}>
-                <Text style={styles.statLabel}>Échecs</Text>
+                <Text style={styles.statLabel}>En attente</Text>
+                <Text style={[styles.statVal, { color: '#D97706' }]}>
+                  {totalEnAttenteTransactions.toLocaleString('fr-FR')} F
+                </Text>
+                <Text style={styles.statCount}>
+                  {transactions.filter((t) => t.statut === 'EN_ATTENTE').length} en cours
+                </Text>
+              </View>
+              <View style={styles.statSep} />
+              <View style={styles.statBox}>
+                <Text style={styles.statLabel}>Refus / Échecs</Text>
                 <Text style={[styles.statVal, { color: AppColors.danger }]}>
-                  {visibleTransactions.filter((t) =>
-                    t.statut === 'ECHEC' || t.statut === 'REJETE' || t.statut === 'ANNULE'
-                  ).length}
+                  {totalEchecTransactions.toLocaleString('fr-FR')} F
+                </Text>
+                <Text style={styles.statCount}>
+                  {transactions.filter((t) => t.statut === 'ECHEC' || t.statut === 'REJETE' || t.statut === 'ANNULE').length} échec(s)
                 </Text>
               </View>
             </View>
+
+            {(activeCategory !== 'TOUS' || activeStatus !== 'TOUS' || searchQuery.trim().length > 0) ? (
+              <View style={styles.filteredSummaryBox}>
+                <Ionicons name="funnel-outline" size={14} color={AppColors.primary} />
+                <Text style={styles.filteredSummaryText}>
+                  Sélection filtrée : <Text style={{ fontWeight: '800' }}>{totalFilteredAmount.toLocaleString('fr-FR')} FCFA</Text> ({filteredTransactions.length} transaction{filteredTransactions.length > 1 ? 's' : ''})
+                </Text>
+              </View>
+            ) : null}
           </Card>
         </View>
         ) : null}
@@ -254,11 +294,21 @@ export default function HistoriqueScreen() {
                       label={
                         tx.statut === 'VALIDE'
                           ? 'Validé'
-                          : tx.statut === 'REJETE'
-                            ? 'Rejeté'
-                            : 'Échec de paiement'
+                          : tx.statut === 'EN_ATTENTE'
+                            ? 'En attente'
+                            : tx.statut === 'REJETE'
+                              ? 'Rejeté'
+                              : tx.statut === 'ANNULE'
+                                ? 'Annulé'
+                                : 'Échec / Refus'
                       }
-                      variant={tx.statut === 'VALIDE' ? 'success' : 'danger'}
+                      variant={
+                        tx.statut === 'VALIDE'
+                          ? 'success'
+                          : tx.statut === 'EN_ATTENTE'
+                            ? 'warning'
+                            : 'danger'
+                      }
                       size="sm"
                     />
                   </View>
@@ -296,17 +346,15 @@ export default function HistoriqueScreen() {
                       </Text>
                     </View>
 
-                    {tx.recuNumero && (
-                      <TouchableOpacity
-                        style={styles.viewReceiptBtn}
-                        onPress={() => router.push(`/recu/${tx.id}`)}
-                        activeOpacity={0.8}
-                      >
-                        <Ionicons name="barcode-outline" size={16} color={AppColors.primary} />
-                        <Text style={styles.viewReceiptText}>Billet & Reçu</Text>
-                        <Ionicons name="chevron-forward" size={14} color={AppColors.primary} />
-                      </TouchableOpacity>
-                    )}
+                    <TouchableOpacity
+                      style={styles.viewReceiptBtn}
+                      onPress={() => router.push(`/recu/${tx.id}?choix=1`)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="receipt-outline" size={16} color={AppColors.primary} />
+                      <Text style={styles.viewReceiptText}>Détail & Reçu</Text>
+                      <Ionicons name="chevron-forward" size={14} color={AppColors.primary} />
+                    </TouchableOpacity>
                   </View>
                 </Card>
               );
@@ -356,6 +404,11 @@ const styles = StyleSheet.create({
     color: AppColors.primary,
     marginTop: 2,
   },
+  summarySub: {
+    fontSize: 11,
+    color: AppColors.textSecondary,
+    marginTop: 3,
+  },
   currency: {
     fontSize: 14,
     fontWeight: '600',
@@ -382,7 +435,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     borderRadius: 14,
     paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
   },
   statBox: {
     alignItems: 'center',
@@ -393,10 +446,31 @@ const styles = StyleSheet.create({
     color: AppColors.textSecondary,
   },
   statVal: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '800',
     color: AppColors.primary,
     marginTop: 2,
+  },
+  statCount: {
+    fontSize: 10,
+    color: AppColors.textMuted,
+    marginTop: 2,
+  },
+  filteredSummaryBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 10,
+  },
+  filteredSummaryText: {
+    fontSize: 12,
+    color: '#1E40AF',
   },
   statSep: {
     width: 1,

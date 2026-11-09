@@ -107,13 +107,6 @@ export default function RootLayout() {
           }}
         />
         <Stack.Screen
-          name="admin-panel"
-          options={{
-            headerShown: false,
-            presentation: 'card',
-          }}
-        />
-        <Stack.Screen
           name="tresorerie"
           options={{
             headerShown: false,

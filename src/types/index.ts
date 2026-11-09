@@ -57,6 +57,7 @@ export interface Transaction {
   donateurTelephone: string;
   checkoutUrl?: string;
   geniuspayReference?: string;
+  motifRejet?: string;
   /** Paiement en ligne accepté sur la passerelle, en attente de validation trésorerie */
   passerelleConfirmee?: boolean;
 }
@@ -110,6 +111,7 @@ export interface Recu {
   heure: string;
   statut: StatutPaiement;
   moyenPaiement: MoyenPaiement;
+  motifRejet?: string;
   egliseNom: string;
   egliseAdresse: string;
   codeSecurite: string;
@@ -132,6 +134,14 @@ export interface ResumeFinancier {
   epargneSolde: number;
   projetsActifsCount: number;
   derniereContributionDate: string;
+  totalToutesTransactions?: number;
+  totalTransactionsCount?: number;
+  totalTransactionsValidees?: number;
+  countTransactionsValidees?: number;
+  totalTransactionsEnAttente?: number;
+  countTransactionsEnAttente?: number;
+  totalTransactionsEchec?: number;
+  countTransactionsEchec?: number;
 }
 
 export interface CotisationStatutaire {

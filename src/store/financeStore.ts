@@ -66,6 +66,7 @@ export interface NewPaymentPayload {
   caisseProjetId?: string;
   evenementId?: string;
   cotisationId?: string;
+  platform?: string;
 }
 
 export interface EspacePayload {

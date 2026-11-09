@@ -24,6 +24,10 @@ import { MoyenPaiement, TypeContribution } from '@/types';
 import { BrandedLoader } from '@/components/motion/BrandedLoader';
 import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 import { VERSEMENT_CHANNELS } from '@/constants/versement';
+import {
+  extractReceiptIdFromReturnUrl,
+  returnUrlIndicatesError,
+} from '@/utils/paymentReturn';
 
 // Préparer la complétion des sessions d'authentification / redirection de paiement
 WebBrowser.maybeCompleteAuthSession();
@@ -62,6 +66,19 @@ export default function PaiementScreen() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activePaymentRef = useRef<ActiveOnlinePayment | null>(null);
+
+  const goToReceipt = (recuId: string, isError = false) => {
+    stopPolling();
+    setActivePayment(null);
+    activePaymentRef.current = null;
+    router.replace(`/recu/${recuId}?choix=1${isError ? '&error=1' : ''}`);
+  };
+
+  const syncInBackground = (transactionId?: string) => {
+    if (!transactionId) return;
+    syncPayment(transactionId).catch(() => undefined);
+  };
 
   const amount = parseInt(params.montant || '25000', 10);
   const titre = params.titre || 'Contribution Financière';
@@ -90,10 +107,16 @@ export default function PaiementScreen() {
 
     // Écoute des redirections deep linking (ex: jcvpay://recu/:id)
     const subscription = Linking.addEventListener('url', (event) => {
-      const parsed = Linking.parse(event.url);
-      if (parsed.path && parsed.path.includes('recu')) {
+      if (!event.url.includes('recu')) return;
+      const fallback = activePaymentRef.current?.recuId;
+      const targetId = extractReceiptIdFromReturnUrl(event.url, fallback);
+      syncInBackground(activePaymentRef.current?.transactionId);
+      if (targetId) {
+        goToReceipt(targetId, returnUrlIndicatesError(event.url));
+      } else {
         stopPolling();
         setActivePayment(null);
+        router.replace('/(tabs)/recus');
       }
     });
 
@@ -103,39 +126,41 @@ export default function PaiementScreen() {
     };
   }, [params.error]);
 
-  const openPaymentUrl = async (url: string, recuId?: string, transactionId?: string) => {
+  /** true si la navigation vers le reçu a été déclenchée (inutile de poller). */
+  const openPaymentUrl = async (
+    url: string,
+    recuId?: string,
+    transactionId?: string
+  ): Promise<boolean> => {
     try {
       if (Platform.OS === 'web') {
         window.open(url, '_blank');
-      } else {
-        const result = await WebBrowser.openAuthSessionAsync(url, 'jcvpay://');
-        if (result.type === 'success' && result.url) {
-          stopPolling();
-          if (result.url.includes('error')) {
-            setActivePayment(null);
-            Alert.alert(
-              'Paiement non abouti',
-              'La transaction a été annulée ou rejetée. Vous pouvez réessayer avec un autre moyen de paiement.'
-            );
-          } else {
-            setPaymentSuccess(true);
-            setTimeout(() => {
-              setActivePayment(null);
-              if (recuId) {
-                router.replace(`/recu/${recuId}?choix=1`);
-              } else {
-                router.replace('/(tabs)/recus');
-              }
-            }, 600);
-          }
-          return;
-        } else if (result.type === 'cancel' || result.type === 'dismiss') {
-          // L'utilisateur est revenu manuellement : vérification directe du statut
-          if (transactionId && recuId) {
-            checkPaymentStatus(transactionId, recuId);
-          }
+        return false;
+      }
+
+      const result = await WebBrowser.openAuthSessionAsync(url, 'jcvpay://');
+
+      if (result.type === 'success' && result.url) {
+        const targetId = extractReceiptIdFromReturnUrl(result.url, recuId);
+        syncInBackground(transactionId);
+        if (targetId) {
+          goToReceipt(targetId, returnUrlIndicatesError(result.url));
+          return true;
         }
       }
+
+      if (
+        result.type === 'success' ||
+        result.type === 'cancel' ||
+        result.type === 'dismiss'
+      ) {
+        syncInBackground(transactionId);
+        if (recuId) {
+          goToReceipt(recuId, returnUrlIndicatesError(result.url || ''));
+          return true;
+        }
+      }
+      return false;
     } catch {
       try {
         await WebBrowser.openBrowserAsync(url);
@@ -144,6 +169,7 @@ export default function PaiementScreen() {
           Alert.alert('Erreur', 'Impossible d’ouvrir la page de paiement sécurisé.');
         });
       }
+      return false;
     }
   };
 
@@ -155,22 +181,12 @@ export default function PaiementScreen() {
       if (updated?.statut === 'VALIDE') {
         stopPolling();
         setPaymentSuccess(true);
-        setTimeout(() => {
-          setActivePayment(null);
-          router.replace(`/recu/${recuId}?choix=1`);
-        }, 1200);
-      } else if (updated?.statut === 'ECHEC' || updated?.statut === 'REJETE') {
+        setActivePayment(null);
+        router.replace(`/recu/${recuId}?choix=1`);
+      } else if (updated?.statut === 'ECHEC' || updated?.statut === 'REJETE' || updated?.statut === 'ANNULE') {
         stopPolling();
-        Alert.alert(
-          'Paiement non abouti',
-          'La transaction a été annulée ou n’a pas pu être validée.',
-          [
-            {
-              text: 'Réessayer',
-              onPress: () => setActivePayment(null),
-            },
-          ]
-        );
+        setActivePayment(null);
+        router.replace(`/recu/${recuId}?choix=1&error=1`);
       }
     } catch {
       // Ignoré lors des vérifications de routine
@@ -192,6 +208,7 @@ export default function PaiementScreen() {
         projetId: params.projetId,
         caisseProjetId: params.caisseProjetId,
         evenementId: params.evenementId,
+        platform: Platform.OS,
       });
 
       setIsProcessing(false);
@@ -203,14 +220,20 @@ export default function PaiementScreen() {
           transactionId: result.transactionId,
           recuId: result.recu.id,
         };
+        activePaymentRef.current = paymentData;
         setActivePayment(paymentData);
-        await openPaymentUrl(result.checkoutUrl, result.recu.id, result.transactionId);
+        const navigated = await openPaymentUrl(
+          result.checkoutUrl,
+          result.recu.id,
+          result.transactionId
+        );
 
-        // Lance le polling automatique (toutes les 3,5 secondes)
-        stopPolling();
-        pollIntervalRef.current = setInterval(() => {
-          checkPaymentStatus(result.transactionId, result.recu.id);
-        }, 3500);
+        if (!navigated) {
+          stopPolling();
+          pollIntervalRef.current = setInterval(() => {
+            checkPaymentStatus(result.transactionId, result.recu.id);
+          }, 3000);
+        }
       } else {
         // Paiement physique ou sans redirection immédiate
         router.replace(`/recu/${result.recu.id}?choix=1`);

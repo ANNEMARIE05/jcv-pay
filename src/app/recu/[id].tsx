@@ -21,6 +21,10 @@ import { Barcode } from '@/components/common/Barcode';
 import { useFinanceStore } from '@/store/financeStore';
 import { Recu } from '@/types';
 import { formatMoyenPaiementLabel } from '@/constants/versement';
+import {
+  extractReceiptIdFromReturnUrl,
+  returnUrlIndicatesError,
+} from '@/utils/paymentReturn';
 
 export default function RecuDetailScreen() {
   const { id, choix } = useLocalSearchParams<{ id: string; choix?: string }>();
@@ -94,6 +98,15 @@ export default function RecuDetailScreen() {
       cancelled = true;
     };
   }, [id, loadReceipt, refreshEspace, recu]);
+
+  useEffect(() => {
+    if (!id || choix !== '1') return;
+    const txId = recu?.transactionId || matchedTx?.id;
+    if (!txId) return;
+    syncPayment(txId)
+      .then(() => refreshEspace())
+      .catch(() => undefined);
+  }, [id, choix, recu?.transactionId, matchedTx?.id, syncPayment, refreshEspace]);
 
   const loading = Boolean(id && !recu && !(fetchState.id === id && fetchState.done));
 
@@ -177,14 +190,27 @@ export default function RecuDetailScreen() {
   const handleOpenCheckout = async () => {
     const url = transaction?.checkoutUrl;
     if (!url) return;
+    const receiptFallback = recu?.id || id;
     try {
       if (Platform.OS === 'web') {
         window.open(url, '_blank');
-      } else {
-        const res = await WebBrowser.openAuthSessionAsync(url, 'jcvpay://');
-        if (res.type === 'success' || res.type === 'cancel' || res.type === 'dismiss') {
-          await handleSync();
+        return;
+      }
+      const res = await WebBrowser.openAuthSessionAsync(url, 'jcvpay://');
+      if (res.type === 'success' && res.url) {
+        const targetId = extractReceiptIdFromReturnUrl(res.url, receiptFallback);
+        if (targetId && targetId !== id) {
+          router.replace(
+            `/recu/${targetId}?choix=1${returnUrlIndicatesError(res.url) ? '&error=1' : ''}`
+          );
         }
+      }
+      if (recu?.transactionId) {
+        syncPayment(recu.transactionId)
+          .then(() => {
+            if (id) loadReceipt(id);
+          })
+          .catch(() => undefined);
       }
     } catch {
       Linking.openURL(url);
@@ -240,14 +266,16 @@ export default function RecuDetailScreen() {
                         ? 'En attente'
                         : recu.statut === 'REJETE'
                           ? 'Rejeté'
-                          : 'Échec de paiement'
+                          : recu.statut === 'ANNULE'
+                            ? 'Annulé'
+                            : 'Paiement refusé / Échec'
                   }
                   variant={
                     recu.statut === 'VALIDE'
                       ? 'success'
-                      : recu.statut === 'ECHEC' || recu.statut === 'REJETE' || recu.statut === 'ANNULE'
-                        ? 'danger'
-                        : 'warning'
+                      : recu.statut === 'EN_ATTENTE'
+                        ? 'warning'
+                        : 'danger'
                   }
                   size="sm"
                 />
@@ -270,6 +298,21 @@ export default function RecuDetailScreen() {
                 <Text style={styles.bannerCategory}>{recu.type}</Text>
                 <Text style={styles.bannerTitle}>{recu.titre}</Text>
               </View>
+
+              {(recu.motifRejet || transaction?.motifRejet) ? (
+                <View style={styles.refusalBox}>
+                  <View style={styles.refusalHeader}>
+                    <Ionicons name="alert-circle" size={18} color={AppColors.danger} />
+                    <Text style={styles.refusalTitle}>Motif du refus / non aboutissement</Text>
+                  </View>
+                  <Text style={styles.refusalReason}>
+                    {recu.motifRejet || transaction?.motifRejet}
+                  </Text>
+                  <Text style={styles.refusalHelp}>
+                    Aucun montant n’a été débité de votre compte. Vous pouvez sélectionner un autre moyen de paiement ou réessayer votre versement.
+                  </Text>
+                </View>
+              ) : null}
             </View>
 
             {/* Perforated Divider 1 with Notches */}
@@ -351,7 +394,9 @@ export default function RecuDetailScreen() {
                         : 'Paiement en ligne en cours de finalisation.')
                     : recu.statut === 'REJETE'
                       ? 'Ce versement a été rejeté par la trésorerie.'
-                      : 'Le paiement n’a pas pu être effectué (échec de paiement). Aucun montant n’a été débité.'}
+                      : recu.statut === 'ANNULE'
+                        ? 'La transaction a été annulée par le donateur.'
+                        : 'Le paiement n’a pas pu être validé (refus ou rejet opérateur). Aucun montant n’a été débité.'}
               </Text>
             </View>
           </View>
@@ -359,26 +404,33 @@ export default function RecuDetailScreen() {
 
         {/* Action Buttons */}
         <View style={styles.actionsContainer}>
-          {showChoice || recu.statut === 'ECHEC' ? (
+          {showChoice || recu.statut === 'ECHEC' || recu.statut === 'REJETE' || recu.statut === 'ANNULE' ? (
             <View style={styles.choiceBox}>
               <Text style={styles.choiceTitle}>
-                {recu.statut === 'ECHEC' ? 'Paiement non abouti' : 'Où aller ensuite ?'}
+                {recu.statut === 'ECHEC' || recu.statut === 'REJETE'
+                  ? 'Paiement non abouti'
+                  : recu.statut === 'ANNULE'
+                    ? 'Paiement annulé'
+                    : 'Où aller ensuite ?'}
               </Text>
               <Text style={styles.choiceHint}>
                 {recu.statut === 'VALIDE'
                   ? 'Votre reçu est prêt et certifié.'
-                  : recu.statut === 'ECHEC'
-                    ? 'Le paiement n’a pas pu être effectué. Vous pouvez retenter votre versement dès maintenant.'
-                    : recu.moyenPaiement === 'ESPECES'
-                      ? 'Déposez votre enveloppe au secrétariat du Temple. La trésorerie confirmera la réception pour valider votre reçu.'
-                      : 'Finalisez le règlement en ligne pour valider immédiatement votre reçu officiel.'}
+                  : recu.statut === 'ECHEC' || recu.statut === 'REJETE'
+                    ? (recu.motifRejet || 'Le paiement a été rejeté ou n’a pas abouti. Vous pouvez réitérer votre versement avec un autre moyen de paiement.')
+                    : recu.statut === 'ANNULE'
+                      ? 'Vous avez annulé la transaction avant confirmation. Vous pouvez recommencer à tout moment.'
+                      : recu.moyenPaiement === 'ESPECES'
+                        ? 'Déposez votre enveloppe au secrétariat du Temple. La trésorerie confirmera la réception pour valider votre reçu.'
+                        : 'Finalisez le règlement en ligne pour valider immédiatement votre reçu officiel.'}
               </Text>
-              {recu.statut === 'ECHEC' ? (
+              {recu.statut === 'ECHEC' || recu.statut === 'REJETE' || recu.statut === 'ANNULE' ? (
                 <Button
                   title="Réessayer un versement"
                   onPress={() => router.replace('/(tabs)')}
                   size="lg"
                   variant="primary"
+                  icon={<Ionicons name="refresh-outline" size={20} color={AppColors.white} />}
                   style={styles.actionBtn}
                 />
               ) : null}
@@ -696,6 +748,36 @@ const styles = StyleSheet.create({
   },
   actionBtn: {
     width: '100%',
+  },
+  refusalBox: {
+    marginTop: 14,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 14,
+    padding: 12,
+  },
+  refusalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  refusalTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: AppColors.danger,
+  },
+  refusalReason: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#991B1B',
+    marginBottom: 4,
+  },
+  refusalHelp: {
+    fontSize: 11,
+    color: '#7F1D1D',
+    lineHeight: 15,
   },
   notFound: {
     flex: 1,
