@@ -11,6 +11,8 @@ import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
 import { canManageCampaigns } from '@/constants/roles';
+import { FormSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 export default function NouvelEvenementScreen() {
   const insets = useSafeAreaInsets();
@@ -20,6 +22,7 @@ export default function NouvelEvenementScreen() {
 
   const user = useAuthStore((s) => s.user);
   const addEvent = useFinanceStore((s) => s.addEvent);
+  const ready = useScreenReady(450);
 
   const [titre, setTitre] = useState('');
   const [date, setDate] = useState('Samedi 26 Septembre 2026');
@@ -29,6 +32,7 @@ export default function NouvelEvenementScreen() {
   const [tarif, setTarif] = useState('0');
   const [places, setPlaces] = useState('300');
   const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   if (!canManageCampaigns(user?.role)) {
     return <Redirect href="/(tabs)/projets" />;
@@ -40,6 +44,7 @@ export default function NouvelEvenementScreen() {
       return;
     }
 
+    setSubmitting(true);
     try {
       await addEvent({
         titre: titre.trim(),
@@ -59,6 +64,8 @@ export default function NouvelEvenementScreen() {
       );
     } catch (error) {
       Alert.alert('Événement non créé', error instanceof Error ? error.message : 'Réessayez.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -76,10 +83,13 @@ export default function NouvelEvenementScreen() {
       }
       footer={
         <View style={[styles.bottomBar, { paddingBottom: bottomInset }]}>
-          <Button title="Publier l événement" onPress={handleCreate} size="lg" />
+          <Button title="Publier l événement" onPress={handleCreate} loading={submitting} size="lg" />
         </View>
       }
     >
+      {!ready ? (
+        <FormSkeleton fields={5} />
+      ) : (
       <Card style={styles.card} variant="elevated">
         <Input label="Titre *" placeholder="ex: Séminaire de la Victoire" value={titre} onChangeText={setTitre} />
         <Input label="Date" value={date} onChangeText={setDate} />
@@ -106,6 +116,7 @@ export default function NouvelEvenementScreen() {
           multiline
         />
       </Card>
+      )}
     </KeyboardAwareScreen>
   );
 }

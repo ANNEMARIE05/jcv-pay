@@ -114,3 +114,12 @@ export function formatMoyenPaiementLabel(moyen: MoyenPaiement | string): string 
 export function isCashPayment(moyen: MoyenPaiement | string): boolean {
   return moyen === 'ESPECES';
 }
+
+export function formatDonateurNom(nom?: string, fallbackName?: string): string {
+  const raw = (nom || '').trim();
+  const fallback = (fallbackName || '').trim();
+  if (!raw || /^(donateur\s+)?anonyme$/i.test(raw)) {
+    return fallback ? `${fallback} (en anonymat)` : 'Donateur (en anonymat)';
+  }
+  return raw;
+}

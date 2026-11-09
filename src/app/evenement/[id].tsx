@@ -16,6 +16,8 @@ import { Card } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { Badge } from '@/components/common/Badge';
 import { useFinanceStore } from '@/store/financeStore';
+import { DetailSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 export default function EvenementDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -26,9 +28,29 @@ export default function EvenementDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const getEventById = useFinanceStore((s) => s.getEventById);
   const registerEvent = useFinanceStore((s) => s.registerEvent);
+  const isLoading = useFinanceStore((s) => s.isLoading);
   const ev = getEventById(id || '');
+  const ready = useScreenReady(450);
 
   const [loading, setLoading] = useState(false);
+
+  if (!ready || (!ev && isLoading)) {
+    return (
+      <View style={styles.container}>
+        <Header
+          title="Détail de l événement"
+          subtitle="Conférences & Rencontres"
+          showBack
+          onBack={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/projets');
+          }}
+          variant="curved"
+        />
+        <DetailSkeleton />
+      </View>
+    );
+  }
 
   if (!ev) {
     return (

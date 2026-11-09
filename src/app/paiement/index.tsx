@@ -22,6 +22,8 @@ import { Button } from '@/components/common/Button';
 import { useFinanceStore } from '@/store/financeStore';
 import { MoyenPaiement, TypeContribution } from '@/types';
 import { BrandedLoader } from '@/components/motion/BrandedLoader';
+import { DetailSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 import { VERSEMENT_CHANNELS } from '@/constants/versement';
 import {
@@ -66,6 +68,7 @@ export default function PaiementScreen() {
   const [activePayment, setActivePayment] = useState<ActiveOnlinePayment | null>(null);
   const [isCheckingStatus, setIsCheckingStatus] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const ready = useScreenReady(450);
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activePaymentRef = useRef<ActiveOnlinePayment | null>(null);
@@ -293,6 +296,7 @@ export default function PaiementScreen() {
           <Button
             title={selectedChannel.isOnline ? 'Effectuer un paiement' : 'Confirmer le versement'}
             onPress={handleDeclare}
+            loading={isProcessing}
             size="md"
             variant="primary"
             fullWidth={false}
@@ -386,6 +390,7 @@ export default function PaiementScreen() {
                             checkPaymentStatus(activePayment.transactionId, activePayment.recuId);
                           }
                         }}
+                        loading={isCheckingStatus}
                         disabled={isCheckingStatus}
                         size="md"
                         variant="primary"
@@ -425,6 +430,9 @@ export default function PaiementScreen() {
         </>
       }
     >
+      {!ready ? (
+        <DetailSkeleton />
+      ) : (
       <View style={styles.cardContainer}>
         {/* Récapitulatif */}
         <Card style={styles.summaryCard} variant="elevated">
@@ -591,6 +599,7 @@ export default function PaiementScreen() {
           </Text>
         </View>
       </View>
+      )}
     </KeyboardAwareScreen>
   );
 }

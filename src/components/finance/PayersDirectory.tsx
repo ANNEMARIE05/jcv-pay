@@ -11,7 +11,7 @@ import { usePagedList } from '@/hooks/usePagedList';
 import { PayerSummary, useFinanceStore } from '@/store/financeStore';
 import { StatutPaiement, Transaction } from '@/types';
 import { ROLE_LABELS } from '@/constants/roles';
-import { formatMoyenPaiementLabel } from '@/constants/versement';
+import { formatDonateurNom, formatMoyenPaiementLabel } from '@/constants/versement';
 import { MemberDetailModal } from '@/components/finance/MemberDetailModal';
 
 export type PayersDirectoryVariant = 'members' | 'history';
@@ -204,6 +204,13 @@ function TxCard({ tx }: { tx: Transaction }) {
 }
 
 function TxRow({ tx, showDonor = false }: { tx: Transaction; showDonor?: boolean }) {
+  const utilisateurs = useFinanceStore((s) => s.utilisateurs);
+  const cleanPhone = (tx.donateurTelephone || '').replace(/\D/g, '');
+  const matchedUser = cleanPhone
+    ? utilisateurs.find((u) => (u.telephone || '').replace(/\D/g, '') === cleanPhone)
+    : undefined;
+  const fallback = matchedUser ? `${matchedUser.prenom} ${matchedUser.nom}`.trim() : undefined;
+
   return (
     <TouchableOpacity
       style={styles.payerTxRow}
@@ -211,7 +218,9 @@ function TxRow({ tx, showDonor = false }: { tx: Transaction; showDonor?: boolean
       activeOpacity={0.8}
     >
       <View style={{ flex: 1 }}>
-        {showDonor ? <Text style={styles.payerName}>{tx.donateurNom}</Text> : null}
+        {showDonor ? (
+          <Text style={styles.payerName}>{formatDonateurNom(tx.donateurNom, fallback)}</Text>
+        ) : null}
         <Text style={styles.payerTxTitle}>{tx.titre}</Text>
         <Text style={styles.payerTxDate}>
           {tx.date} • {tx.heure} • {tx.type} • {formatMoyenPaiementLabel(tx.moyenPaiement)}

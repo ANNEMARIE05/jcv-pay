@@ -107,6 +107,8 @@ interface FinanceState {
   membresTrace: Record<string, MembreTrace>;
   dernierAjoutId: string | null;
   tresorerieGlobale: typeof emptyTreasury;
+  isLoading: boolean;
+  isMutating: boolean;
   refreshEspace: (role?: RoleUtilisateur) => Promise<void>;
   loadReceipt: (id: string) => Promise<Recu>;
   processPayment: (payload: NewPaymentPayload) => Promise<{ recu: Recu; checkoutUrl?: string | null; transactionId: string }>;
@@ -127,6 +129,7 @@ interface FinanceState {
     source: SourceCaisse;
     auteur: string;
     beneficiaire?: string;
+    caisseProjetId?: string;
   }) => Promise<MouvementCaisse | null>;
   openProjectCaisse: (payload: {
     nom: string;
@@ -240,9 +243,14 @@ function rememberUtilisateur(user: Utilisateur & { motDePasseTemporaire?: string
 }
 
 async function postEspace(path: string, body?: unknown) {
-  const espace = await api.post<EspacePayload>(path, body);
-  applyEspace(espace);
-  return espace;
+  useFinanceStore.setState({ isMutating: true });
+  try {
+    const espace = await api.post<EspacePayload>(path, body);
+    applyEspace(espace);
+    return espace;
+  } finally {
+    useFinanceStore.setState({ isMutating: false });
+  }
 }
 
 export const useFinanceStore = create<FinanceState>((_set, get) => ({
@@ -265,17 +273,24 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
   membresTrace: {},
   dernierAjoutId: null,
   tresorerieGlobale: emptyTreasury,
+  isLoading: false,
+  isMutating: false,
 
   refreshEspace: async (role) => {
-    const espace = await api.get<EspacePayload>('/api/espace');
-    applyEspace(espace);
-    if (role === 'ADMINISTRATEUR' || role === 'SUPER_ADMIN') {
-      try {
-        const utilisateurs = await api.get<Utilisateur[]>('/api/utilisateurs');
-        useFinanceStore.setState({ utilisateurs });
-      } catch {
-        // La liste de l’espace reste affichée si ce droit est refusé.
+    useFinanceStore.setState({ isLoading: true });
+    try {
+      const espace = await api.get<EspacePayload>('/api/espace');
+      applyEspace(espace);
+      if (role === 'ADMINISTRATEUR' || role === 'SUPER_ADMIN') {
+        try {
+          const utilisateurs = await api.get<Utilisateur[]>('/api/utilisateurs');
+          useFinanceStore.setState({ utilisateurs });
+        } catch {
+          // La liste de l’espace reste affichée si ce droit est refusé.
+        }
       }
+    } finally {
+      useFinanceStore.setState({ isLoading: false });
     }
   },
 
@@ -354,12 +369,18 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
   },
 
   recordCashPayment: async (payload) => {
-    const data = await api.post<{ recu: Recu; espace: EspacePayload }>('/api/paiements/especes', payload);
-    applyEspace(data.espace);
-    return data.recu;
+    useFinanceStore.setState({ isMutating: true });
+    try {
+      const data = await api.post<{ recu: Recu; espace: EspacePayload }>('/api/paiements/especes', payload);
+      applyEspace(data.espace);
+      return data.recu;
+    } finally {
+      useFinanceStore.setState({ isMutating: false });
+    }
   },
 
   recordWithdrawal: async (payload) => {
+    useFinanceStore.setState({ isMutating: true });
     try {
       const data = await api.post<{ mouvement: MouvementCaisse; espace: EspacePayload }>(
         '/api/mouvements/sortie',
@@ -370,6 +391,8 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
     } catch (error) {
       if (error instanceof Error && error.message.toLowerCase().includes('solde')) return null;
       throw error;
+    } finally {
+      useFinanceStore.setState({ isMutating: false });
     }
   },
 
@@ -545,40 +568,55 @@ export const useFinanceStore = create<FinanceState>((_set, get) => ({
   },
 
   addUser: async (payload) => {
-    const data = await api.post<{
-      utilisateur: Utilisateur & { motDePasseTemporaire?: string };
-      espace: EspacePayload;
-    }>('/api/utilisateurs', payload);
-    applyEspace(data.espace);
-    rememberUtilisateur({
-      ...data.utilisateur,
-      motDePasseTemporaire: data.utilisateur.motDePasseTemporaire,
-    });
-    return data.utilisateur;
+    useFinanceStore.setState({ isMutating: true });
+    try {
+      const data = await api.post<{
+        utilisateur: Utilisateur & { motDePasseTemporaire?: string };
+        espace: EspacePayload;
+      }>('/api/utilisateurs', payload);
+      applyEspace(data.espace);
+      rememberUtilisateur({
+        ...data.utilisateur,
+        motDePasseTemporaire: data.utilisateur.motDePasseTemporaire,
+      });
+      return data.utilisateur;
+    } finally {
+      useFinanceStore.setState({ isMutating: false });
+    }
   },
 
   updateUserRole: async (userId, role) => {
-    const espace = await api.patch<EspacePayload>(`/api/utilisateurs/${userId}/role`, { role });
-    applyEspace(espace);
+    useFinanceStore.setState({ isMutating: true });
+    try {
+      const espace = await api.patch<EspacePayload>(`/api/utilisateurs/${userId}/role`, { role });
+      applyEspace(espace);
+    } finally {
+      useFinanceStore.setState({ isMutating: false });
+    }
   },
 
   addFidele: async ({ prenom, nom, telephone, role }) => {
-    const data = await api.post<{
-      utilisateur: Utilisateur & { motDePasseTemporaire?: string };
-      espace: EspacePayload;
-    }>('/api/fideles', { prenom, nom, telephone, role });
-    applyEspace(data.espace);
-    const created = data.utilisateur.role === role
-      ? data.utilisateur
-      : { ...data.utilisateur, role };
-    if (data.utilisateur.role !== role) {
-      const espace = await api.patch<EspacePayload>(`/api/utilisateurs/${data.utilisateur.id}/role`, { role });
-      applyEspace(espace);
+    useFinanceStore.setState({ isMutating: true });
+    try {
+      const data = await api.post<{
+        utilisateur: Utilisateur & { motDePasseTemporaire?: string };
+        espace: EspacePayload;
+      }>('/api/fideles', { prenom, nom, telephone, role });
+      applyEspace(data.espace);
+      const created = data.utilisateur.role === role
+        ? data.utilisateur
+        : { ...data.utilisateur, role };
+      if (data.utilisateur.role !== role) {
+        const espace = await api.patch<EspacePayload>(`/api/utilisateurs/${data.utilisateur.id}/role`, { role });
+        applyEspace(espace);
+      }
+      rememberUtilisateur({
+        ...created,
+        motDePasseTemporaire: data.utilisateur.motDePasseTemporaire ?? created.motDePasseTemporaire,
+      });
+      return created;
+    } finally {
+      useFinanceStore.setState({ isMutating: false });
     }
-    rememberUtilisateur({
-      ...created,
-      motDePasseTemporaire: data.utilisateur.motDePasseTemporaire ?? created.motDePasseTemporaire,
-    });
-    return created;
   },
 }));

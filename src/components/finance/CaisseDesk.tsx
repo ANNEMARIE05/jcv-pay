@@ -9,21 +9,41 @@ import { Card } from '@/components/common/Card';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
 import { useFinanceStore } from '@/store/financeStore';
+import { useAuthStore } from '@/store/authStore';
+import { canManageMoney } from '@/constants/roles';
 import { CAISSE_PRINCIPALE_ID } from '@/store/caisseDeskStore';
-import { CaisseProjet } from '@/types';
+import { CaisseProjet, SourceCaisse } from '@/types';
 
 type Cible = { id: string; nom: string; solde: number; principale?: boolean };
 
+const WITHDRAW_SOURCES: { id: SourceCaisse; label: string }[] = [
+  { id: 'CAISSE_PHYSIQUE', label: 'Espèces (Caisse)' },
+  { id: 'WAVE', label: 'Wave' },
+  { id: 'ORANGE_MONEY', label: 'Orange Money' },
+  { id: 'BANQUE', label: 'Banque' },
+];
+
 export function CaisseDesk({ allowContribute = false }: { allowContribute?: boolean }) {
+  const user = useAuthStore((s) => s.user);
+  const canWithdraw = canManageMoney(user?.role);
   const caisses = useFinanceStore((s) => s.caissesProjet);
   const soldeEglise = useFinanceStore((s) => s.tresorerieGlobale.soldeTotal);
   const transferCaisse = useFinanceStore((s) => s.transferCaisse);
   const deleteCaisse = useFinanceStore((s) => s.deleteCaisse);
+  const recordWithdrawal = useFinanceStore((s) => s.recordWithdrawal);
 
   const [fromId, setFromId] = useState<string | null>(null);
   const [toId, setToId] = useState<string | null>(null);
   const [montant, setMontant] = useState('');
   const [motif, setMotif] = useState('');
+  const [isTransferring, setIsTransferring] = useState(false);
+
+  const [withdrawCaisseId, setWithdrawCaisseId] = useState<string | null>(null);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [withdrawMotif, setWithdrawMotif] = useState('');
+  const [withdrawBeneficiaire, setWithdrawBeneficiaire] = useState('');
+  const [withdrawSource, setWithdrawSource] = useState<SourceCaisse>('CAISSE_PHYSIQUE');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
 
   const autres = useMemo(() => caisses.filter((c) => !c.principale), [caisses]);
 
@@ -82,11 +102,74 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
       Alert.alert('Motif', 'Indiquez pourquoi l’argent change de caisse.');
       return;
     }
+    setIsTransferring(true);
     try {
       await transferCaisse({ fromId, toId, montant: amount, motif: motif.trim() });
       closeTransfer();
     } catch (error) {
       Alert.alert('Transfert impossible', error instanceof Error ? error.message : 'Réessayez.');
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
+  const openWithdraw = (caisseId: string) => {
+    setWithdrawCaisseId(caisseId);
+    setWithdrawAmount('');
+    setWithdrawMotif('');
+    setWithdrawBeneficiaire('');
+    setWithdrawSource('CAISSE_PHYSIQUE');
+  };
+
+  const closeWithdraw = () => setWithdrawCaisseId(null);
+
+  const withdrawTarget = cibles.find((c) => c.id === withdrawCaisseId);
+
+  const confirmWithdraw = async () => {
+    if (!withdrawCaisseId || !withdrawTarget) return;
+    const amount = parseInt(withdrawAmount.replace(/\D/g, ''), 10) || 0;
+    if (amount <= 0) {
+      Alert.alert('Montant invalide', 'Indiquez une somme supérieure à 0 FCFA.');
+      return;
+    }
+    if (!withdrawMotif.trim()) {
+      Alert.alert('Motif requis', 'Indiquez la raison de ce retrait de caisse.');
+      return;
+    }
+    if (amount > withdrawTarget.solde) {
+      Alert.alert(
+        'Solde insuffisant',
+        `« ${withdrawTarget.nom} » dispose de ${withdrawTarget.solde.toLocaleString('fr-FR')} FCFA.`
+      );
+      return;
+    }
+
+    setIsWithdrawing(true);
+    try {
+      const mvt = await recordWithdrawal({
+        montant: amount,
+        motif: withdrawMotif.trim(),
+        source: withdrawSource,
+        auteur: user ? `${user.prenom} ${user.nom} (${user.role})` : 'Trésorerie',
+        beneficiaire: withdrawBeneficiaire.trim() || undefined,
+        caisseProjetId: withdrawCaisseId === CAISSE_PRINCIPALE_ID ? undefined : withdrawCaisseId,
+      });
+      if (!mvt) {
+        Alert.alert(
+          'Solde insuffisant',
+          'Le solde disponible sur cette caisse ne permet pas ce retrait.'
+        );
+        return;
+      }
+      closeWithdraw();
+      Alert.alert(
+        'Retrait effectué',
+        `${amount.toLocaleString('fr-FR')} FCFA retirés de « ${withdrawTarget.nom} » (${withdrawMotif.trim()}).`
+      );
+    } catch (error) {
+      Alert.alert('Retrait impossible', error instanceof Error ? error.message : 'Réessayez.');
+    } finally {
+      setIsWithdrawing(false);
     }
   };
 
@@ -133,8 +216,18 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
           {cibles[0].solde.toLocaleString('fr-FR')} FCFA
         </Text>
         <Text style={styles.mainHint}>
-          L’argent de l’église arrive ici. Cette caisse ne se supprime pas et n’envoie rien. Les autres caisses peuvent lui transférer.
+          L’argent de l’église arrive ici. Cette caisse ne se supprime pas. Les autres caisses peuvent lui transférer.
         </Text>
+        {canWithdraw ? (
+          <TouchableOpacity
+            style={styles.mainWithdrawBtn}
+            onPress={() => openWithdraw(CAISSE_PRINCIPALE_ID)}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="arrow-up-circle-outline" size={18} color={AppColors.primary} />
+            <Text style={styles.mainWithdrawBtnText}>Retirer de la caisse</Text>
+          </TouchableOpacity>
+        ) : null}
       </Card>
 
       <Text style={styles.sectionLabel}>Autres caisses</Text>
@@ -158,6 +251,16 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
               <Text style={styles.cardAmount}>{reste.toLocaleString('fr-FR')} FCFA</Text>
 
               <View style={styles.actionsRow}>
+                {canWithdraw && caisse.statut !== 'TERMINEE' ? (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.withdrawBtn]}
+                    onPress={() => openWithdraw(caisse.id)}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="arrow-up-circle-outline" size={16} color={AppColors.accentDark} />
+                    <Text style={styles.withdrawBtnText}>Retirer</Text>
+                  </TouchableOpacity>
+                ) : null}
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.transferBtn]}
                   onPress={() => openTransfer(caisse.id)}
@@ -239,8 +342,90 @@ export function CaisseDesk({ allowContribute = false }: { allowContribute?: bool
               onChangeText={setMotif}
               placeholder="ex: Avance pour le chantier"
             />
-            <Button title="Transférer" onPress={confirmTransfer} size="lg" />
+            <Button title="Transférer" onPress={confirmTransfer} loading={isTransferring} size="lg" />
             <TouchableOpacity onPress={closeTransfer} style={styles.cancel}>
+              <Text style={styles.cancelText}>Annuler</Text>
+            </TouchableOpacity>
+          </Card>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={withdrawCaisseId != null}
+        transparent
+        animationType="fade"
+        onRequestClose={closeWithdraw}
+      >
+        <View style={styles.backdrop}>
+          <Card style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Retirer de la caisse</Text>
+            <Text style={styles.sheetSub}>
+              Depuis {withdrawTarget?.nom}. Solde disponible :{' '}
+              {(withdrawTarget?.solde || 0).toLocaleString('fr-FR')} FCFA
+            </Text>
+
+            <Text style={styles.fieldLabel}>Caisse à débiter</Text>
+            <View style={styles.pills}>
+              {cibles.map((c) => {
+                const active = withdrawCaisseId === c.id;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.pill, active && styles.pillOn]}
+                    onPress={() => setWithdrawCaisseId(c.id)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.pillText, active && styles.pillTextOn]}>
+                      {c.nom} ({c.solde.toLocaleString('fr-FR')} F)
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.fieldLabel}>Moyen de retrait</Text>
+            <View style={styles.pills}>
+              {WITHDRAW_SOURCES.map((s) => {
+                const active = withdrawSource === s.id;
+                return (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={[styles.pill, active && styles.pillOn]}
+                    onPress={() => setWithdrawSource(s.id)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.pillText, active && styles.pillTextOn]}>{s.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Input
+              label="Montant à retirer (FCFA) *"
+              value={withdrawAmount}
+              onChangeText={setWithdrawAmount}
+              keyboardType="numeric"
+              placeholder="ex: 25000"
+            />
+            <Input
+              label="Motif du retrait *"
+              value={withdrawMotif}
+              onChangeText={setWithdrawMotif}
+              placeholder="ex: Achat matériel sonorisation"
+            />
+            <Input
+              label="Bénéficiaire (optionnel)"
+              value={withdrawBeneficiaire}
+              onChangeText={setWithdrawBeneficiaire}
+              placeholder="ex: Fournisseur / Comité technique"
+            />
+            <Button
+              title="Confirmer le retrait"
+              onPress={confirmWithdraw}
+              loading={isWithdrawing}
+              size="lg"
+            />
+            <TouchableOpacity onPress={closeWithdraw} style={styles.cancel}>
               <Text style={styles.cancelText}>Annuler</Text>
             </TouchableOpacity>
           </Card>
@@ -279,6 +464,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     marginTop: 6,
+  },
+  mainWithdrawBtn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    backgroundColor: AppColors.white,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+  },
+  mainWithdrawBtnText: {
+    color: AppColors.primary,
+    fontWeight: '800',
+    fontSize: 13,
   },
   sectionLabel: {
     fontSize: 13,
@@ -322,6 +523,10 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.primaryMuted,
   },
   transferBtnText: { color: AppColors.primary, fontWeight: '700', fontSize: 13 },
+  withdrawBtn: {
+    backgroundColor: AppColors.accentLight,
+  },
+  withdrawBtnText: { color: AppColors.accentDark, fontWeight: '700', fontSize: 13 },
   deleteBtn: {
     backgroundColor: AppColors.dangerLight,
   },

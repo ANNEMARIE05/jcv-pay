@@ -6,9 +6,12 @@ import { AppColors } from '@/constants/colors';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
 import { DISPLAY_PREF_ITEMS, useDisplayPrefsStore } from '@/store/displayPrefsStore';
+import { ListSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 export default function AffichageScreen() {
   const prefs = useDisplayPrefsStore();
+  const ready = useScreenReady(450);
 
   return (
     <View style={styles.container}>
@@ -22,6 +25,9 @@ export default function AffichageScreen() {
         }}
         variant="curved"
       />
+      {!ready ? (
+        <ListSkeleton count={4} />
+      ) : (
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.intro}>
           Ces choix s appliquent à l accueil et au tableau d administration. Ils ne suppriment pas les données.
@@ -50,6 +56,7 @@ export default function AffichageScreen() {
           })}
         </Card>
       </ScrollView>
+      )}
     </View>
   );
 }

@@ -18,6 +18,8 @@ import { Button } from '@/components/common/Button';
 import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 import { useAuthStore } from '@/store/authStore';
 import { TypeContribution } from '@/types';
+import { FormSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 const CONTRIBUTION_TYPES: { id: TypeContribution; label: string; icon: any }[] = [
   { id: 'DIME', label: 'Dîme (10%)', icon: 'cash-outline' },
@@ -45,6 +47,7 @@ export default function NouvelleContributionScreen() {
   }>();
 
   const user = useAuthStore((s) => s.user);
+  const ready = useScreenReady(450);
 
   const [selectedType, setSelectedType] = useState<TypeContribution>(
     params.type || 'DIME'
@@ -73,7 +76,7 @@ export default function NouvelleContributionScreen() {
     let finalPhone = currentUserPhone;
 
     if (isAnonymous) {
-      finalNom = 'Donateur Anonyme';
+      finalNom = `${currentUserName} (en anonymat)`;
     } else if (donateForOther) {
       if (!donateurNom.trim()) {
         Alert.alert('Nom requis', 'Veuillez saisir le nom de la personne pour qui vous donnez.');
@@ -138,6 +141,10 @@ export default function NouvelleContributionScreen() {
         </View>
       }
     >
+      {!ready ? (
+        <FormSkeleton fields={4} />
+      ) : (
+        <>
           {/* Section 1: Type de contribution */}
           <View style={styles.cardWrapper}>
             <Card style={styles.card} variant="elevated">
@@ -254,9 +261,9 @@ export default function NouvelleContributionScreen() {
                   {isAnonymous && <Ionicons name="checkmark" size={14} color={AppColors.white} />}
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.optionTitle}>Don strictement anonyme</Text>
+                  <Text style={styles.optionTitle}>Don en anonymat</Text>
                   <Text style={styles.optionSubtitle}>
-                    Votre nom ne sera pas affiché sur les bilans publics de l église.
+                    Votre nom sera suivi de la mention « (en anonymat) » dans les transactions afin de pouvoir prier pour vous, sans figurer sur les bilans publics.
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -313,6 +320,8 @@ export default function NouvelleContributionScreen() {
               />
             </Card>
           </View>
+        </>
+      )}
     </KeyboardAwareScreen>
   );
 }

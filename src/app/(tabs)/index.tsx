@@ -38,6 +38,7 @@ export default function HomeScreen() {
   const unreadCount = useNotificationStore((s) => s.unreadCount);
   const resume = useFinanceStore((s) => s.resume);
   const recus = useFinanceStore((s) => s.recus);
+  const isLoading = useFinanceStore((s) => s.isLoading);
 
   const ready = useScreenReady(720);
   const recusCount = recus.filter((r) => r.statut !== 'EN_ATTENTE').length;
@@ -68,7 +69,7 @@ export default function HomeScreen() {
     return <AdminDashboard embedded />;
   }
 
-  if (!ready) {
+  if (!ready || (isLoading && recus.length === 0)) {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor={AppColors.primary} translucent={Platform.OS === 'android'} />

@@ -12,6 +12,8 @@ import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
 import { canManageCampaigns } from '@/constants/roles';
 import { Projet } from '@/types';
+import { FormSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 const CATEGORIES: { id: Projet['categorie']; label: string }[] = [
   { id: 'CONSTRUCTION', label: 'Construction' },
@@ -28,6 +30,7 @@ export default function NouveauProjetScreen() {
 
   const user = useAuthStore((s) => s.user);
   const addProject = useFinanceStore((s) => s.addProject);
+  const ready = useScreenReady(450);
 
   const [titre, setTitre] = useState('');
   const [objectif, setObjectif] = useState('');
@@ -35,6 +38,7 @@ export default function NouveauProjetScreen() {
   const [organisateur, setOrganisateur] = useState('Conseil Pastoral');
   const [dateFin, setDateFin] = useState('31 Décembre 2026');
   const [description, setDescription] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   if (!canManageCampaigns(user?.role)) {
     return <Redirect href="/(tabs)/projets" />;
@@ -51,6 +55,7 @@ export default function NouveauProjetScreen() {
       return;
     }
 
+    setSubmitting(true);
     try {
       await addProject({
         titre: titre.trim(),
@@ -70,6 +75,8 @@ export default function NouveauProjetScreen() {
       );
     } catch (error) {
       Alert.alert('Projet non créé', error instanceof Error ? error.message : 'Réessayez.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -87,10 +94,13 @@ export default function NouveauProjetScreen() {
       }
       footer={
         <View style={[styles.bottomBar, { paddingBottom: bottomInset }]}>
-          <Button title="Publier le projet" onPress={handleCreate} size="lg" />
+          <Button title="Publier le projet" onPress={handleCreate} loading={submitting} size="lg" />
         </View>
       }
     >
+      {!ready ? (
+        <FormSkeleton fields={5} />
+      ) : (
       <Card style={styles.card} variant="elevated">
         <Text style={styles.hint}>
           Une caisse de collecte est créée automatiquement avec le même objectif.
@@ -147,6 +157,7 @@ export default function NouveauProjetScreen() {
           multiline
         />
       </Card>
+      )}
     </KeyboardAwareScreen>
   );
 }

@@ -18,7 +18,7 @@ import { usePagedList } from '@/hooks/usePagedList';
 import { useFinanceStore } from '@/store/financeStore';
 import { useAuthStore } from '@/store/authStore';
 import { isStaff } from '@/constants/roles';
-import { formatMoyenPaiementLabel } from '@/constants/versement';
+import { formatDonateurNom, formatMoyenPaiementLabel } from '@/constants/versement';
 import { TicketSkeleton } from '@/components/motion/Skeleton';
 import { FadeInView } from '@/components/motion/FadeIn';
 import { useScreenReady } from '@/hooks/useScreenReady';
@@ -31,7 +31,22 @@ export default function RecusScreen() {
   const staff = isStaff(user?.role);
   const recus = useFinanceStore((s) => s.recus);
   const transactions = useFinanceStore((s) => s.transactions);
+  const utilisateurs = useFinanceStore((s) => s.utilisateurs);
   const resume = useFinanceStore((s) => s.resume);
+  const isLoading = useFinanceStore((s) => s.isLoading);
+
+  const resolveDonorLabel = (nom?: string, phone?: string) => {
+    const cleanPhone = (phone || '').replace(/\D/g, '');
+    const matchedUser = cleanPhone
+      ? utilisateurs.find((u) => (u.telephone || '').replace(/\D/g, '') === cleanPhone)
+      : undefined;
+    const fallback = matchedUser
+      ? `${matchedUser.prenom} ${matchedUser.nom}`.trim()
+      : !staff && user
+        ? `${user.prenom} ${user.nom}`.trim()
+        : undefined;
+    return formatDonateurNom(nom, fallback);
+  };
 
   const [activeTab, setActiveTab] = useState<StatusTab>('TOUS');
   const [searchQuery, setSearchQuery] = useState('');
@@ -54,6 +69,46 @@ export default function RecusScreen() {
       : staff
         ? visibleTransactions.length
         : visibleRecus.length;
+
+  const totalValide = useMemo(() => {
+    if (staff && resume.totalTransactionsValidees != null) {
+      return resume.totalTransactionsValidees;
+    }
+    const list = staff ? visibleTransactions : visibleRecus;
+    return list
+      .filter((item) => item.statut === 'VALIDE')
+      .reduce((sum, item) => sum + (item.montant || 0), 0);
+  }, [staff, visibleTransactions, visibleRecus, resume.totalTransactionsValidees]);
+
+  const totalEnAttente = useMemo(() => {
+    if (staff && resume.totalTransactionsEnAttente != null) {
+      return resume.totalTransactionsEnAttente;
+    }
+    const list = staff ? visibleTransactions : visibleRecus;
+    return list
+      .filter((item) => item.statut === 'EN_ATTENTE')
+      .reduce((sum, item) => sum + (item.montant || 0), 0);
+  }, [staff, visibleTransactions, visibleRecus, resume.totalTransactionsEnAttente]);
+
+  const totalEchec = useMemo(() => {
+    if (staff && resume.totalTransactionsEchec != null) {
+      return resume.totalTransactionsEchec;
+    }
+    const list = staff ? visibleTransactions : visibleRecus;
+    return list
+      .filter((item) => item.statut === 'ECHEC' || item.statut === 'REJETE' || item.statut === 'ANNULE')
+      .reduce((sum, item) => sum + (item.montant || 0), 0);
+  }, [staff, visibleTransactions, visibleRecus, resume.totalTransactionsEchec]);
+
+  const countEchec = useMemo(() => {
+    if (staff && resume.countTransactionsEchec != null) {
+      return resume.countTransactionsEchec;
+    }
+    const list = staff ? visibleTransactions : visibleRecus;
+    return list.filter(
+      (item) => item.statut === 'ECHEC' || item.statut === 'REJETE' || item.statut === 'ANNULE'
+    ).length;
+  }, [staff, visibleTransactions, visibleRecus, resume.countTransactionsEchec]);
 
   const filteredRecus = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -105,7 +160,7 @@ export default function RecusScreen() {
         variant="curved"
       />
 
-      {!ready ? (
+      {!ready || (isLoading && transactions.length === 0 && recus.length === 0) ? (
         <TicketSkeleton />
       ) : (
       <ScrollView
@@ -116,20 +171,35 @@ export default function RecusScreen() {
       >
         {/* Total of All Transactions Summary */}
         <View style={styles.summaryBarContainer}>
-          <View style={styles.summaryBar}>
-            <View>
-              <Text style={styles.summaryBarLabel}>Total de toutes les transactions</Text>
-              <Text style={styles.summaryBarAmount}>
-                {totalAllTransactionsAmount.toLocaleString('fr-FR')} <Text style={styles.currencySmall}>FCFA</Text>
-              </Text>
+          <Card style={styles.txTotalCard} variant="elevated">
+            <Text style={styles.txTotalLabel}>TOTAL DE TOUTES LES TRANSACTIONS</Text>
+            <Text style={styles.txTotalAmount}>
+              {totalAllTransactionsAmount.toLocaleString('fr-FR')} FCFA
+            </Text>
+            <Text style={styles.txTotalHint}>
+              {txOperationCount} opération{txOperationCount > 1 ? 's' : ''} enregistrée{txOperationCount > 1 ? 's' : ''}
+            </Text>
+            <View style={styles.txTotalStatsRow}>
+              <View style={styles.txTotalStat}>
+                <Text style={styles.txTotalStatLabel}>Validées</Text>
+                <Text style={styles.txTotalStatValOk}>
+                  {totalValide.toLocaleString('fr-FR')} F
+                </Text>
+              </View>
+              <View style={styles.txTotalStat}>
+                <Text style={styles.txTotalStatLabel}>En attente</Text>
+                <Text style={styles.txTotalStatValWarn}>
+                  {totalEnAttente.toLocaleString('fr-FR')} F
+                </Text>
+              </View>
+              <View style={styles.txTotalStat}>
+                <Text style={styles.txTotalStatLabel}>Refus / échec</Text>
+                <Text style={styles.txTotalStatValErr}>
+                  {totalEchec.toLocaleString('fr-FR')} F ({countEchec})
+                </Text>
+              </View>
             </View>
-            <View style={styles.summaryBarBadge}>
-              <Ionicons name="receipt-outline" size={14} color={AppColors.primary} />
-              <Text style={styles.summaryBarBadgeText}>
-                {txOperationCount} opération{txOperationCount > 1 ? 's' : ''}
-              </Text>
-            </View>
-          </View>
+          </Card>
         </View>
 
         {/* Segmented Filter Bar (Screen 13 tabs: Ongoing, Completed, Canceled) */}
@@ -244,7 +314,9 @@ export default function RecusScreen() {
                         size="sm"
                       />
                     </View>
-                    <Text style={styles.label}>{tx.donateurNom}</Text>
+                    <Text style={styles.label}>
+                      {resolveDonorLabel(tx.donateurNom, tx.donateurTelephone)}
+                    </Text>
                     <Text style={styles.val}>
                       {tx.date} • {tx.heure} • {tx.montant.toLocaleString('fr-FR')} FCFA
                     </Text>
@@ -306,7 +378,9 @@ export default function RecusScreen() {
                   {/* Ticket Body */}
                   <View style={styles.ticketBody}>
                     <Text style={styles.contributionTitle}>{recu.titre}</Text>
-                    <Text style={styles.label}>{recu.donateurNom}</Text>
+                    <Text style={styles.label}>
+                      {resolveDonorLabel(recu.donateurNom, recu.donateurTelephone)}
+                    </Text>
 
                     <View style={styles.infoGrid}>
                       <View style={styles.infoCol}>
@@ -372,46 +446,64 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 4,
   },
-  summaryBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  txTotalCard: {
+    padding: 18,
+    borderRadius: 20,
     backgroundColor: AppColors.white,
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: AppColors.borderLight,
-    ...Shadows.small,
   },
-  summaryBarLabel: {
-    fontSize: 11,
-    color: AppColors.textSecondary,
-    fontWeight: '500',
-  },
-  summaryBarAmount: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: AppColors.primary,
-    marginTop: 2,
-  },
-  currencySmall: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: AppColors.textSecondary,
-  },
-  summaryBarBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: AppColors.primaryMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  summaryBarBadgeText: {
+  txTotalLabel: {
     fontSize: 11,
     fontWeight: '700',
+    letterSpacing: 0.6,
+    color: AppColors.textMuted,
+    textTransform: 'uppercase',
+  },
+  txTotalAmount: {
+    fontSize: 22,
+    fontWeight: '800',
     color: AppColors.primary,
+    marginTop: 6,
+  },
+  txTotalHint: {
+    fontSize: 12,
+    color: AppColors.textMuted,
+    marginTop: 4,
+  },
+  txTotalStatsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
+  },
+  txTotalStat: {
+    flex: 1,
+    minWidth: 90,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: AppColors.background,
+  },
+  txTotalStatLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: AppColors.textMuted,
+  },
+  txTotalStatValOk: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#16A34A',
+    marginTop: 4,
+  },
+  txTotalStatValWarn: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#D97706',
+    marginTop: 4,
+  },
+  txTotalStatValErr: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#DC2626',
+    marginTop: 4,
   },
   tabsContainer: {
     paddingHorizontal: 20,

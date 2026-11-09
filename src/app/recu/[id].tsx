@@ -20,7 +20,9 @@ import { Button } from '@/components/common/Button';
 import { Barcode } from '@/components/common/Barcode';
 import { useFinanceStore } from '@/store/financeStore';
 import { Recu } from '@/types';
-import { formatMoyenPaiementLabel } from '@/constants/versement';
+import { formatDonateurNom, formatMoyenPaiementLabel } from '@/constants/versement';
+import { TicketSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 import {
   extractReceiptIdFromReturnUrl,
   getPaymentReturnBaseUrl,
@@ -122,8 +124,28 @@ export default function RecuDetailScreen() {
   }, [id, choix, recu?.transactionId, recu?.statut, recu?.moyenPaiement, matchedTx?.id, syncPayment, loadReceipt, refreshEspace]);
 
   const loading = Boolean(id && !recu && !(fetchState.id === id && fetchState.done));
+  const ready = useScreenReady(450);
+  const isLoadingStore = useFinanceStore((s) => s.isLoading);
 
   const showChoice = choix === '1' || recu?.statut === 'EN_ATTENTE';
+
+  if (!ready || loading || (!recu && isLoadingStore)) {
+    return (
+      <View style={styles.container}>
+        <Header
+          title="Détails du reçu"
+          subtitle="Chargement du reçu officiel…"
+          showBack
+          onBack={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)');
+          }}
+          variant="curved"
+        />
+        <TicketSkeleton count={2} />
+      </View>
+    );
+  }
 
   if (!recu) {
     return (
@@ -139,9 +161,7 @@ export default function RecuDetailScreen() {
         <View style={styles.notFound}>
           <Ionicons name="receipt-outline" size={48} color={AppColors.textMuted} />
           <Text style={styles.notFoundText}>
-            {loading
-              ? 'Chargement du reçu…'
-              : 'Le reçu demandé n existe pas ou est en cours de traitement.'}
+            Le reçu demandé n existe pas ou est en cours de traitement.
           </Text>
           <Button
             title="Retour à mes reçus"
@@ -341,7 +361,7 @@ export default function RecuDetailScreen() {
               <View style={styles.detailsGrid}>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailTitle}>Nom du membre</Text>
-                  <Text style={styles.detailContent}>{recu.donateurNom || 'Anonyme'}</Text>
+                  <Text style={styles.detailContent}>{formatDonateurNom(recu.donateurNom)}</Text>
                 </View>
                 <View style={styles.detailRow}>
                   <Text style={styles.detailTitle}>Matricule d église</Text>
@@ -461,6 +481,7 @@ export default function RecuDetailScreen() {
                 <Button
                   title={isSyncing ? "Vérification en cours…" : "Vérifier la confirmation du paiement"}
                   onPress={handleSync}
+                  loading={isSyncing}
                   size="lg"
                   variant={transaction?.checkoutUrl ? "outline" : "primary"}
                   icon={<Ionicons name="refresh-outline" size={20} color={transaction?.checkoutUrl ? AppColors.primary : AppColors.white} />}

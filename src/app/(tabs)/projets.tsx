@@ -28,6 +28,7 @@ export default function ProjetsScreen() {
   const projets = useFinanceStore((s) => s.projets);
   const evenements = useFinanceStore((s) => s.evenements);
   const caissesProjet = useFinanceStore((s) => s.caissesProjet);
+  const isLoading = useFinanceStore((s) => s.isLoading);
   const user = useAuthStore((s) => s.user);
   const staff = canManageCampaigns(user?.role);
   const isAdmin = canManagePeople(user?.role);
@@ -100,7 +101,7 @@ export default function ProjetsScreen() {
         }
       />
 
-      {!ready ? (
+      {!ready || (isLoading && projets.length === 0 && caissesProjet.length === 0) ? (
         <ListSkeleton count={4} />
       ) : (
       <ScrollView

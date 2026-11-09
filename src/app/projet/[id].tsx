@@ -20,6 +20,8 @@ import { scrollInputIntoView } from '@/utils/scrollInputIntoView';
 import { Badge } from '@/components/common/Badge';
 import { ProgressBar } from '@/components/common/ProgressBar';
 import { useFinanceStore } from '@/store/financeStore';
+import { DetailSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 const DONATION_TIERS = [
   { id: 't1', label: 'Bâtisseur Bronze', amount: 10000, desc: 'Participe aux matériaux de base' },
@@ -36,10 +38,29 @@ export default function ProjetDetailScreen() {
 
   const { id } = useLocalSearchParams<{ id: string }>();
   const getProjectById = useFinanceStore((s) => s.getProjectById);
+  const isLoading = useFinanceStore((s) => s.isLoading);
   const projet = getProjectById(id || '');
+  const ready = useScreenReady(450);
 
   const [selectedTier, setSelectedTier] = useState<string>('t2');
   const [customAmount, setCustomAmount] = useState<string>('25000');
+
+  if (!ready || (!projet && isLoading)) {
+    return (
+      <View style={styles.container}>
+        <Header
+          title="Détail du projet"
+          showBack
+          onBack={() => {
+            if (router.canGoBack()) router.back();
+            else router.replace('/(tabs)/projets');
+          }}
+          variant="curved"
+        />
+        <DetailSkeleton />
+      </View>
+    );
+  }
 
   if (!projet) {
     return (

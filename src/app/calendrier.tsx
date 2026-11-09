@@ -18,6 +18,8 @@ import { Badge } from '@/components/common/Badge';
 import { Button } from '@/components/common/Button';
 import { TypeContribution } from '@/types';
 import { useFinanceStore } from '@/store/financeStore';
+import { DetailSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 interface ChurchEventDay {
   dateKey: string;
@@ -92,6 +94,7 @@ export default function CalendrierScreen() {
     : Math.max(insets.bottom, 16) + 8;
 
   const evenements = useFinanceStore((s) => s.evenements);
+  const ready = useScreenReady(450);
   const today = useMemo(() => new Date(), []);
   const todayKey = toDateKey(today);
 
@@ -253,6 +256,9 @@ export default function CalendrierScreen() {
         variant="curved"
       />
 
+      {!ready ? (
+        <DetailSkeleton />
+      ) : (
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.scrollContent, { paddingBottom: 60 + bottomInset }]}
@@ -579,6 +585,7 @@ export default function CalendrierScreen() {
           </View>
         </View>
       </ScrollView>
+      )}
     </View>
   );
 }

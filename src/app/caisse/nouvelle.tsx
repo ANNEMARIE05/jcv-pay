@@ -11,6 +11,8 @@ import { KeyboardAwareScreen } from '@/components/common/KeyboardAwareScreen';
 import { useAuthStore } from '@/store/authStore';
 import { useFinanceStore } from '@/store/financeStore';
 import { canManageCampaigns } from '@/constants/roles';
+import { FormSkeleton } from '@/components/motion/Skeleton';
+import { useScreenReady } from '@/hooks/useScreenReady';
 
 export default function NouvelleCaisseScreen() {
   const insets = useSafeAreaInsets();
@@ -21,11 +23,13 @@ export default function NouvelleCaisseScreen() {
   const user = useAuthStore((s) => s.user);
   const projets = useFinanceStore((s) => s.projets);
   const openProjectCaisse = useFinanceStore((s) => s.openProjectCaisse);
+  const ready = useScreenReady(450);
 
   const [nom, setNom] = useState('');
   const [description, setDescription] = useState('');
   const [objectif, setObjectif] = useState('');
   const [projetId, setProjetId] = useState<string | undefined>(undefined);
+  const [submitting, setSubmitting] = useState(false);
 
   if (!canManageCampaigns(user?.role)) {
     return <Redirect href="/(tabs)/projets" />;
@@ -42,6 +46,7 @@ export default function NouvelleCaisseScreen() {
       return;
     }
 
+    setSubmitting(true);
     try {
       await openProjectCaisse({
         nom: nom.trim(),
@@ -56,6 +61,8 @@ export default function NouvelleCaisseScreen() {
       );
     } catch (error) {
       Alert.alert('Caisse non ouverte', error instanceof Error ? error.message : 'Réessayez.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -73,10 +80,13 @@ export default function NouvelleCaisseScreen() {
       }
       footer={
         <View style={[styles.bottomBar, { paddingBottom: bottomInset }]}>
-          <Button title="Ouvrir la caisse" onPress={handleCreate} size="lg" />
+          <Button title="Ouvrir la caisse" onPress={handleCreate} loading={submitting} size="lg" />
         </View>
       }
     >
+      {!ready ? (
+        <FormSkeleton fields={4} />
+      ) : (
       <Card style={styles.card} variant="elevated">
         <Text style={styles.hint}>
           La caisse principale existe déjà et ne se supprime pas. Ici, vous ouvrez une caisse pour un projet ou un besoin précis.
@@ -131,6 +141,7 @@ export default function NouvelleCaisseScreen() {
             })}
         </View>
       </Card>
+      )}
     </KeyboardAwareScreen>
   );
 }

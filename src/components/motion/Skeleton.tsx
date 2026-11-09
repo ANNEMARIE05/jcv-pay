@@ -132,6 +132,46 @@ export function TicketSkeleton({ count = 3 }: { count?: number }) {
   );
 }
 
+export function FormSkeleton({ fields = 4 }: { fields?: number }) {
+  return (
+    <View style={styles.listWrap}>
+      <View style={styles.card}>
+        <Bone width="75%" height={14} />
+        <Bone width="50%" height={11} style={{ marginTop: 8, marginBottom: 16 }} />
+        {Array.from({ length: fields }).map((_, i) => (
+          <View key={i} style={{ marginTop: i === 0 ? 4 : 16 }}>
+            <Bone width="38%" height={11} />
+            <Bone width="100%" height={44} radius={12} style={{ marginTop: 8 }} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+export function DetailSkeleton() {
+  return (
+    <View style={styles.listWrap}>
+      <View style={styles.card}>
+        <View style={styles.row}>
+          <Bone width={90} height={24} radius={12} />
+          <Bone width={110} height={24} radius={12} />
+        </View>
+        <Bone width="85%" height={20} style={{ marginTop: 14 }} />
+        <Bone width="55%" height={13} style={{ marginTop: 8 }} />
+        <Bone width="100%" height={72} radius={14} style={{ marginTop: 16 }} />
+        <View style={[styles.amtRow, { marginTop: 16 }]}>
+          <Bone width="28%" height={36} radius={10} />
+          <Bone width="28%" height={36} radius={10} />
+          <Bone width="28%" height={36} radius={10} />
+        </View>
+      </View>
+      <SkeletonCard lines={4} withAvatar={false} />
+      <SkeletonCard lines={3} withAvatar={false} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   bone: {
     backgroundColor: '#D9E3E8',

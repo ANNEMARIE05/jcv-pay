@@ -27,6 +27,8 @@ export default function PayeursScreen() {
   const transactions = useFinanceStore((s) => s.transactions);
   const utilisateurs = useFinanceStore((s) => s.utilisateurs);
   const dernierAjoutId = useFinanceStore((s) => s.dernierAjoutId);
+  const isLoading = useFinanceStore((s) => s.isLoading);
+  const isMutating = useFinanceStore((s) => s.isMutating);
   const ready = useScreenReady(420);
   const [section, setSection] = useState<PayeursSection>('MEMBRES');
   const [open, setOpen] = useState(false);
@@ -94,7 +96,7 @@ export default function PayeursScreen() {
           ) : undefined
         }
       />
-      {!ready ? (
+      {!ready || (isLoading && utilisateurs.length === 0) ? (
         <ListSkeleton count={5} />
       ) : (
         <ScrollView
@@ -169,7 +171,7 @@ export default function PayeursScreen() {
                   </TouchableOpacity>
                 );
               })}
-              <Button title="Ajouter" onPress={save} size="lg" />
+              <Button title="Ajouter" onPress={save} loading={isMutating} size="lg" />
               <TouchableOpacity onPress={close} style={styles.cancel}>
                 <Text style={styles.cancelText}>Annuler</Text>
               </TouchableOpacity>

@@ -12,7 +12,7 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { getVersementChannel } from '@/constants/versement';
+import { formatDonateurNom, getVersementChannel } from '@/constants/versement';
 import { AppColors, Shadows } from '@/constants/colors';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/common/Card';
@@ -48,7 +48,18 @@ export default function HistoriqueScreen() {
     : Math.max(insets.bottom, 16) + 8;
 
   const transactions = useFinanceStore((s) => s.transactions);
+  const utilisateurs = useFinanceStore((s) => s.utilisateurs);
   const resume = useFinanceStore((s) => s.resume);
+  const isLoading = useFinanceStore((s) => s.isLoading);
+
+  const resolveDonorLabel = (nom?: string, phone?: string) => {
+    const cleanPhone = (phone || '').replace(/\D/g, '');
+    const matchedUser = cleanPhone
+      ? utilisateurs.find((u) => (u.telephone || '').replace(/\D/g, '') === cleanPhone)
+      : undefined;
+    const fallback = matchedUser ? `${matchedUser.prenom} ${matchedUser.nom}`.trim() : undefined;
+    return formatDonateurNom(nom, fallback);
+  };
 
   const [activeCategory, setActiveCategory] = useState<string>('TOUS');
   const [activeStatus, setActiveStatus] = useState<string>('TOUS');
@@ -131,7 +142,7 @@ export default function HistoriqueScreen() {
         variant="curved"
       />
 
-      {!ready ? (
+      {!ready || (isLoading && transactions.length === 0) ? (
         <ListSkeleton count={5} />
       ) : (
       <ScrollView
@@ -314,6 +325,9 @@ export default function HistoriqueScreen() {
                   </View>
 
                   <Text style={styles.txTitle}>{tx.titre}</Text>
+                  <Text style={styles.txDate}>
+                    {resolveDonorLabel(tx.donateurNom, tx.donateurTelephone)}
+                  </Text>
 
                   {/* Payment Info */}
                   <View style={styles.txMetaRow}>
